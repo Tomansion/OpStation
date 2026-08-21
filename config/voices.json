@@ -1,0 +1,61 @@
+{
+  "_comment": "Pinned Piper voice per actor type. NEVER change one of these after scenarios exist: a voice is the only cue distinguishing one actor from another, so swapping one silently invalidates every provenance question in the bank. Adding a voice requires regenerating the bank.",
+
+  "engine": "piper",
+  "voices_index": "https://huggingface.co/rhasspy/piper-voices",
+  "pinned_at": "2026-08-21",
+
+  "assignment": {
+    "security": {
+      "voice": "en_GB-northern_english_male-medium",
+      "why": "Northern English male. The most immediately identifiable accent in the set — Security speaks in every phase and during the finale, so it must never be mistaken for anyone else."
+    },
+    "construction": {
+      "voice": "en_US-joe-medium",
+      "why": "Lower-pitched American male. Reads as a working crew voice and sits well away from the other two males in both accent and pitch."
+    },
+    "cargo": {
+      "voice": "en_US-kusal-medium",
+      "why": "Sri Lankan-accented English male. Third male voice, distinct from the other two by accent rather than pitch, which is a stronger cue than pitch alone."
+    },
+    "medical": {
+      "voice": "en_GB-cori-high",
+      "why": "British RP female, high quality. Calm and precise, which suits Medical, and the only 'high' model among the human actors."
+    },
+    "civilian": {
+      "voice": "en_GB-alba-medium",
+      "why": "Scottish female. Chosen over a second American female specifically to keep it unmistakable from Medical and from the system voice."
+    },
+    "system": {
+      "voice": "en_US-lessac-high",
+      "why": "The flattest, most neutral model available — appropriate for automated station announcements. Always rendered through the PA filter below, so it can never be confused with a person.",
+      "post_filter": "pa_intercom"
+    }
+  },
+
+  "post_filters": {
+    "pa_intercom": {
+      "purpose": "Make automated station announcements instantly recognisable as machine-spoken. Without this the system voice is just a seventh person, and provenance questions about who said what get muddier.",
+      "ffmpeg": "-af \"highpass=f=400,lowpass=f=3400,acompressor=threshold=-18dB:ratio=6,volume=1.6\"",
+      "note": "Band-limits to telephone/intercom range and compresses hard. Applied at generation time only; the runtime plays the rendered file as-is."
+    }
+  },
+
+  "distinctness_matrix": {
+    "_comment": "The weakest pair is what determines whether provenance is answerable. Reviewed pairwise at pinning time.",
+    "sexes": "3 male (security, construction, cargo), 3 female (medical, civilian, system)",
+    "accents": "Northern English, American, Sri Lankan English, British RP, Scottish, American-neutral",
+    "weakest_pair": "medical (British RP female) vs civilian (Scottish female) — same sex and both British, separated by a strong regional accent difference",
+    "system_separation": "system is additionally separated from all five human voices by the pa_intercom filter"
+  },
+
+  "rejected": {
+    "en_US-amy-medium": "American female — too close to en_US-lessac-high, which is reserved for the system voice",
+    "en_US-libritts-high": "904-speaker multi-speaker model; speaker selection is not stable enough to pin",
+    "en_US-arctic-medium": "18-speaker multi-speaker model, same problem",
+    "en_GB-vctk-medium": "109-speaker multi-speaker model, same problem",
+    "en_US-danny-low": "low quality; radio messages are audio-only with no transcript, so intelligibility is not optional",
+    "en_US-kathleen-low": "low quality, same reason",
+    "en_GB-southern_english_female-low": "low quality, same reason"
+  }
+}

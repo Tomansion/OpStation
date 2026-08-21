@@ -1,57 +1,102 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>OpStation — station layout v1</title>
+<title>OpStation — station layout</title>
 <style>
-  :root { --bg:#0b0d0e; --panel:#121618; --edge:#293438; --txt:#c8d3d6; --dim:#7d8a90;
-          --open:#2fbf6b; --closed:#d0413f; }
+  :root { --bg:#151515; --panel:#c0c0c0; --panelDark:#8a8a8a; --panelLight:#e8e8e8;
+          --ink:#111; --open:#008a20; --closed:#c00000; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt);
-         font:12px 'JetBrains Mono','IBM Plex Mono','DejaVu Sans Mono',monospace;
-         display:flex; height:100vh; overflow:hidden; }
-  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:16px; min-width:0; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:12px "Courier New", Courier, monospace; display:flex; height:100vh; overflow:hidden; }
+
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:10px;
+           min-width:0; background:#000; }
   canvas { display:block; }
-  aside { width:280px; border-left:1px solid var(--edge); background:var(--panel);
-          padding:16px; overflow-y:auto; flex-shrink:0; }
-  h1 { font-size:12px; letter-spacing:.14em; margin:0 0 4px; text-transform:uppercase; }
-  .sub { color:var(--dim); font-size:10px; margin-bottom:18px; }
-  h2 { font-size:10px; letter-spacing:.14em; color:var(--dim); margin:18px 0 8px;
-       text-transform:uppercase; border-bottom:1px solid var(--edge); padding-bottom:5px; }
-  table { width:100%; border-collapse:collapse; font-size:11px; }
-  td { padding:3px 0; }
-  td.id { width:38px; color:var(--txt); }
-  td.st { text-align:right; width:58px; }
-  .open { color:var(--open); } .closed { color:var(--closed); }
+
+  aside { width:300px; flex-shrink:0; background:var(--panel); overflow-y:auto;
+          border-left:2px solid var(--panelLight); }
+  .bar { background:#000080; color:#fff; padding:4px 7px; font-weight:bold; font-size:12px;
+         letter-spacing:.05em; }
+  .body { padding:8px; }
+  .hint { font-size:11px; margin:0 0 10px; color:#333; }
+  h2 { font-size:11px; font-weight:bold; margin:12px 0 4px; background:var(--panelDark);
+       color:#fff; padding:2px 5px; letter-spacing:.05em; }
+
+  table { width:100%; border-collapse:collapse; font-size:12px; }
   tr.row { cursor:pointer; }
-  tr.row:hover td { background:#1b2124; }
-  td.link { color:var(--dim); font-size:10px; }
-  button { width:100%; background:#1b2124; color:var(--txt); border:1px solid var(--edge);
-           padding:7px; font:inherit; font-size:10px; letter-spacing:.1em; cursor:pointer;
-           text-transform:uppercase; margin-top:8px; }
-  button:hover { background:#232b2f; }
-  .note { color:var(--dim); font-size:10px; line-height:1.6; margin-top:14px; }
+  tr.row:nth-child(odd) { background:#b4b4b4; }
+  tr.row:hover { background:#ffff80; }
+  td { padding:2px 4px; }
+  td.id { width:34px; font-weight:bold; }
+  td.link { color:#333; font-size:11px; }
+  td.st { text-align:right; width:56px; font-weight:bold; }
+  .open { color:var(--open); } .closed { color:var(--closed); }
+
+  button { width:100%; margin-top:5px; padding:4px; font:inherit; font-size:11px; font-weight:bold;
+           background:var(--panel); color:var(--ink); cursor:pointer; letter-spacing:.04em;
+           border-top:2px solid var(--panelLight); border-left:2px solid var(--panelLight);
+           border-right:2px solid #555; border-bottom:2px solid #555; }
+  button:active { border-top-color:#555; border-left-color:#555;
+                  border-right-color:var(--panelLight); border-bottom-color:var(--panelLight); }
+
+  .legend { margin-top:12px; font-size:11px; line-height:1.5; }
+  .legend div { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+  .sw { width:22px; height:9px; flex-shrink:0; border:1px solid #444; }
+  .note { font-size:11px; line-height:1.5; margin-top:10px; padding:6px; background:#b0b0b0;
+          border-top:1px solid var(--panelLight); border-left:1px solid var(--panelLight);
+          border-right:1px solid #666; border-bottom:1px solid #666; }
+  code { background:#a8a8a8; padding:0 2px; }
 </style>
 
 <div id="stage"><canvas id="c"></canvas></div>
 
 <aside>
-  <h1>Station layout v1</h1>
-  <div class="sub">Click a door on the map or in the list to toggle it.</div>
+  <div class="bar">OPSTATION :: DOOR CONTROL :: LAYOUT</div>
+  <div class="body">
+    <p class="hint">Click a door on the map or in the list to toggle it.</p>
 
-  <h2>Hangar doors</h2>
-  <table id="hangars"></table>
+    <h2>HANGAR DOORS</h2>
+    <table id="hangars"></table>
 
-  <h2>Internal doors</h2>
-  <table id="internals"></table>
+    <h2>INTERNAL DOORS</h2>
+    <table id="internals"></table>
 
-  <button id="reset">Reset to initial state</button>
-  <button id="allopen">Open everything</button>
-  <button id="allclosed">Close everything</button>
+    <button id="reset">RESET TO START STATE</button>
+    <button id="allopen">OPEN EVERYTHING</button>
+    <button id="allclosed">CLOSE EVERYTHING</button>
 
-  <div class="note">
-    Doorless passages (grey bars) cannot be operated:
-    Observation Deck &harr; Living Quarters, Storage &harr; C3, Hangar Bay 5 &harr; C3.
-    Hangar Bay 5 has no internal door on purpose — H5 is the only barrier
-    between Extension Epsilon and the interior.
+    <h2>LEGEND</h2>
+    <div class="legend">
+      <div><span class="sw" style="background:#ff1a1a"></span> door CLOSED</div>
+      <div><span class="sw" style="background:#00ff40"></span> door OPEN</div>
+      <div><span class="sw" style="background:#4a4f52"></span> corridor</div>
+      <div><span class="sw" style="background:#2e3234"></span> room</div>
+      <div><span class="sw" style="background:#3b4043"></span> hangar bay</div>
+      <div><span class="sw" style="background:#151515;border-color:#8a9296"></span> permanent opening</div>
+    </div>
+
+    <div class="note">
+      A <b>permanent opening</b> is a gap in the wall with no door &mdash; marked by two
+      pale jamb ticks and a break in the seam. None can ever be closed:
+      <div id="passagelist"></div>
+      So the Observation Deck has no door of its own: sealing it means closing the
+      Living Quarters door, which seals both together. Storage is the mirror case
+      &mdash; sealing it means sealing the whole service corridor.
+    </div>
+
+    <div class="note">
+      <b>Doors inside a sealed volume stay open.</b> Sealing a place means closing its
+      <i>boundary</i>, not everything within it. That is why sealing the service sector
+      leaves the Engineering, Hangar Bay 4 and Hangar Bay 5 doors open &mdash; those bays
+      are <i>inside</i> the sealed volume. Pick a target below and the caption lists
+      exactly which doors fall into which category.
+    </div>
+
+    <h2>ISOLATION TARGETS</h2>
+    <p class="hint">Click one. Every door is opened, then only the doors that
+    <b>seal that volume</b> are closed. The sealed area is tinted amber.</p>
+    <table id="isolation"></table>
+    <div id="isocap" class="note" style="display:none"></div>
+    <button id="isoclear">CLEAR SELECTION</button>
   </div>
 </aside>
 
@@ -59,6 +104,7 @@
 <script>
 (function () {
   const station = /*__STATION_JSON__*/;
+
   const view = new StationView(document.getElementById('c'), station, {
     onDoorClick: id => toggle(id)
   });
@@ -69,9 +115,8 @@
       const st = view.getDoorState(d.id);
       const tr = document.createElement('tr');
       tr.className = 'row';
-      const link = d.between.join(' ↔ ');
       tr.innerHTML = `<td class="id">${d.id}</td>` +
-                     `<td class="link">${link}</td>` +
+                     `<td class="link">${d.between.join(' - ')}</td>` +
                      `<td class="st ${st}">${st.toUpperCase()}</td>`;
       tr.onclick = () => toggle(d.id);
       tbody.appendChild(tr);
@@ -88,6 +133,14 @@
     refresh();
   };
 
+  const areaName = id => (station.areas.find(a => a.id === id) || {}).name || id;
+  const cap = document.getElementById('isocap');
+
+  const clearIso = () => {
+    view.setHighlight([]);
+    cap.style.display = 'none';
+  };
+
   const setAll = state => {
     const m = {};
     for (const d of station.doors) m[d.id] = state === null ? d.initial : state;
@@ -95,9 +148,50 @@
     refresh();
   };
 
-  document.getElementById('reset').onclick     = () => setAll(null);
-  document.getElementById('allopen').onclick   = () => setAll('open');
-  document.getElementById('allclosed').onclick = () => setAll('closed');
+  document.getElementById('reset').onclick     = () => { clearIso(); setAll(null); };
+  document.getElementById('allopen').onclick   = () => { clearIso(); setAll('open'); };
+  document.getElementById('allclosed').onclick = () => { clearIso(); setAll('closed'); };
+  document.getElementById('isoclear').onclick  = () => { clearIso(); setAll(null); };
+
+  // isolation targets: open everything, close only the cut, tint the volume
+  const iso = document.getElementById('isolation');
+
+  for (const t of station.isolation_targets) {
+    const all = t.cut.concat(t.hangar_doors_inside);
+    const tr = document.createElement('tr');
+    tr.className = 'row';
+    tr.innerHTML = `<td class="link">${t.phrase}</td>` +
+                   `<td class="st" style="width:auto;font-size:11px">${all.join(' ')}</td>`;
+    tr.onclick = () => {
+      setAll('open');
+      const m = {};
+      for (const id of all) m[id] = 'closed';
+      view.setDoorStates(m);
+      view.setHighlight(t.volume);
+      refresh();
+
+      const interior = t.interior_doors || [];
+      const outside = station.doors.map(d => d.id)
+        .filter(id => !all.includes(id) && !interior.includes(id));
+      cap.innerHTML =
+        `<b>${t.phrase}</b><br><br>` +
+        `<b>sealed volume</b><br>${t.volume.map(areaName).join(', ')}<br><br>` +
+        `<b>closed to seal it</b><br>${t.cut.join(', ')}` +
+        (t.hangar_doors_inside.length
+          ? ` &nbsp;+&nbsp; ${t.hangar_doors_inside.join(', ')} <i>(hangar doors inside the volume)</i>` : '') +
+        (interior.length
+          ? `<br><br><b>left open &mdash; interior to the volume</b><br>${interior.join(', ')}` : '') +
+        `<br><br><b>left open &mdash; outside the volume</b><br>${outside.join(', ')}`;
+      cap.style.display = 'block';
+    };
+    iso.appendChild(tr);
+  }
+
+  // permanent openings, listed from the data so it cannot drift
+  document.getElementById('passagelist').innerHTML =
+    '<br>' + station.passages
+      .map(p => '&bull; ' + p.between.map(areaName).join(' &ndash; '))
+      .join('<br>') + '<br><br>';
 
   refresh();
   window.addEventListener('resize', () => view.resize());

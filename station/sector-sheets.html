@@ -1,0 +1,617 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OpStation — sector reference</title>
+<style>
+  @page { size: A4 portrait; margin: 11mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: #000;
+         font: 11px "Courier New", Courier, monospace; }
+
+  header { border-bottom: 3px solid #000; padding-bottom: 6px; margin-bottom: 12px; }
+  h1 { font-size: 18px; margin: 0 0 3px; letter-spacing: .06em; }
+  header p { margin: 0; font-size: 10px; }
+
+  h2.band { font-size: 12px; letter-spacing: .09em; background: #000; color: #fff;
+            padding: 4px 7px; margin: 16px 0 10px; }
+
+  /* page 1: the reference map */
+  .reference { display: flex; gap: 14px; page-break-after: always; align-items: flex-start; }
+  .refmap { width: 470px; height: 514px; flex-shrink: 0; border: 2px solid #000; }
+  .refnotes { flex: 1; min-width: 0; font-size: 10px; line-height: 1.65; }
+  .refnotes p { margin: 0 0 9px; }
+  .refnotes b { letter-spacing: .04em; }
+  .sw { display: inline-block; width: 20px; height: 8px; border: 1px solid #333;
+        vertical-align: middle; margin-right: 4px; }
+
+  /* sector cards */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  .card { border: 2px solid #000; padding: 7px; page-break-inside: avoid; }
+  .card h3 { font-size: 11px; margin: 0 0 1px; letter-spacing: .03em; line-height: 1.25; }
+  .card .id { font-size: 8px; color: #666; margin: 0 0 5px; }
+  .cardmap { width: 100%; height: 215px; border: 1px solid #999; background: #000;
+             margin-bottom: 5px; }
+  .card canvas { display: block; margin: 0 auto; }
+  .row { display: flex; gap: 4px; font-size: 10px; border-top: 1px solid #ccc; padding: 2px 0; }
+  .row span:first-child { color: #555; flex-shrink: 0; width: 52px; font-size: 8px;
+                          letter-spacing: .04em; padding-top: 1px; }
+  .row b { letter-spacing: .04em; }
+  .none { color: #999; font-weight: normal; }
+  .why { font-size: 9px; line-height: 1.4; margin: 5px 0 0; padding: 4px;
+         background: #eee; border-left: 3px solid #666; }
+  footer { margin-top: 12px; font-size: 9px; color: #666; text-align: right; }
+</style>
+
+<header>
+  <h1>OPSTATION &mdash; SECTOR REFERENCE</h1>
+  <p>Which doors seal which place. Station layout v4 &mdash; fixed, identical in every shift.</p>
+</header>
+
+<div class="reference">
+  <div class="refmap"><canvas id="c_reference"></canvas></div>
+  <div class="refnotes">
+    <p><b>THE STATION.</b> Three corridors stacked north to south, with rooms and
+    hangar bays hanging off them. Doors are numbered top to bottom, then left to
+    right, so C1 owns D1&ndash;D5. Every hangar bay has an inner door onto the station
+    and an outer door <span class="sw" style="background:#ff1a1a"></span>H1&ndash;H5 to space.</p>
+
+    <p><b>HOW TO READ THE CARDS.</b> Each card shows every door
+    <span class="sw" style="background:#00ff40"></span>open except the ones that
+    <b>seal that place</b>, shown <span class="sw" style="background:#ff1a1a"></span>closed.
+    The sealed place is tinted <span class="sw" style="background:#d9a520"></span>amber.
+    The card maps carry no names &mdash; use this one to place them.</p>
+
+    <p><b>SEALING MEANS CLOSING THE BOUNDARY, NOT EVERYTHING INSIDE.</b> A door that
+    sits <i>inside</i> a sealed place stays open. Closing it would cut the inside off
+    from itself, not from the station. Each card lists these as <b>INSIDE</b>.</p>
+
+    <p><b>TWO PLACES HAVE NO DOOR OF THEIR OWN.</b> The Observation Deck opens onto
+    Living Quarters through a permanent gap, and Storage opens onto C3 the same way.
+    Neither can be sealed alone &mdash; sealing either one seals its neighbour with it.
+    On the map these gaps are drawn as a break in the wall with two pale jamb ticks.</p>
+
+    <p><b>HANGAR BAY 3 IS A SHORTCUT.</b> It touches both C2 and C3, so there are two
+    ways between the central and service sectors. Sealing either sector takes both
+    doors &mdash; the junction door alone is not enough. This is the easiest mistake
+    to make on the whole station.</p>
+
+    <p><b>IF IT IS ABOUT PRESSURE OR VACUUM</b>, also close the hangar doors inside the
+    sealed place. If it is only about keeping people out, do not.</p>
+  </div>
+</div>
+
+<h2 class="band">SECTORS &mdash; ONE CARD EACH</h2>
+
+<p style="font-size:10px;margin:0 0 10px">A <b>sector</b> spans more than one area, so which
+doors bound it is not obvious from the map &mdash; that is what these cards are for. Single
+rooms, hangar bays and corridors are not shown: each has its own visible wall, and the
+door on it is the door that seals it.</p>
+
+<div class="grid">
+<div class="card">
+  <h3>THE CENTRAL SECTOR</h3>
+  <p class="id">central_sector</p>
+  <div class="cardmap"><canvas id="c_central_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D4, D7, D9</b></div>
+  <div class="row"><span>+ PRESSURE</span><b>H3</b></div>
+  <div class="row"><span>INSIDE</span><b>D6, D8</b></div>
+  <div class="row"><span>SEALS</span><span>C2 Central Junction, Hangar Bay 3, Security</span></div>
+  <p class="why">Includes both Hangar Bay 3 doors' side of the loop — the bay bridges C2 and C3.</p>
+</div>
+
+<div class="card">
+  <h3>THE CONSTRUCTION SECTOR</h3>
+  <p class="id">construction_sector</p>
+  <div class="cardmap"><canvas id="c_construction_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D7, D9, D10, D12</b></div>
+  <div class="row"><span>+ PRESSURE</span><b>H5</b></div>
+  <div class="row"><span>INSIDE</span><b>D13</b></div>
+  <div class="row"><span>SEALS</span><span>C3 Service Corridor, Hangar Bay 5, Storage</span></div>
+  <p class="why">Nested inside the service sector, but it needs MORE doors. Leaving Engineering and Hangar Bay 4 outside the sealed volume turns their corridor doors into boundary doors.</p>
+</div>
+
+<div class="card">
+  <h3>THE ENGINEERING SECTOR</h3>
+  <p class="id">engineering_sector</p>
+  <div class="cardmap"><canvas id="c_engineering_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D10, D12</b></div>
+  <div class="row"><span>+ PRESSURE</span><b>H4</b></div>
+  <div class="row"><span>INSIDE</span><b>D11</b></div>
+  <div class="row"><span>SEALS</span><span>Engineering, Hangar Bay 4</span></div>
+  <p class="why">Engineering and Hangar Bay 4 treated as one place, so the door between them stays open.</p>
+</div>
+
+<div class="card">
+  <h3>THE NORTH SECTOR</h3>
+  <p class="id">north_sector</p>
+  <div class="cardmap"><canvas id="c_north_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D4</b></div>
+  <div class="row"><span>+ PRESSURE</span><b>H1, H2</b></div>
+  <div class="row"><span>INSIDE</span><b>D1, D2, D3, D5</b></div>
+  <div class="row"><span>SEALS</span><span>C1 North Corridor, Hangar Bay 1, Hangar Bay 2, Living, Medical Bay, Observation</span></div>
+  
+</div>
+
+<div class="card">
+  <h3>THE RESIDENTIAL SECTOR</h3>
+  <p class="id">residential_sector</p>
+  <div class="cardmap"><canvas id="c_residential_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D5</b></div>
+  <div class="row"><span>+ PRESSURE</span><b><span class="none">&mdash;</span></b></div>
+  <div class="row"><span>INSIDE</span><b><span class="none">&mdash;</span></b></div>
+  <div class="row"><span>SEALS</span><span>Living, Observation</span></div>
+  <p class="why">The Observation Deck has no door of its own — it opens onto Living Quarters through a permanent gap. Sealing one seals both.</p>
+</div>
+
+<div class="card">
+  <h3>THE SERVICE SECTOR</h3>
+  <p class="id">service_sector</p>
+  <div class="cardmap"><canvas id="c_service_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D7, D9</b></div>
+  <div class="row"><span>+ PRESSURE</span><b>H4, H5</b></div>
+  <div class="row"><span>INSIDE</span><b>D10, D11, D12, D13</b></div>
+  <div class="row"><span>SEALS</span><span>C3 Service Corridor, Engineering, Hangar Bay 4, Hangar Bay 5, Storage</span></div>
+  <p class="why">Two doors, not one. Hangar Bay 3 is a back route between C2 and C3, so closing the junction door alone leaves the sector open.</p>
+</div>
+
+<div class="card">
+  <h3>THE STORAGE SECTOR</h3>
+  <p class="id">storage_sector</p>
+  <div class="cardmap"><canvas id="c_storage_sector"></canvas></div>
+  <div class="row"><span>CLOSE</span><b>D7, D9, D10, D12, D13</b></div>
+  <div class="row"><span>+ PRESSURE</span><b><span class="none">&mdash;</span></b></div>
+  <div class="row"><span>INSIDE</span><b><span class="none">&mdash;</span></b></div>
+  <div class="row"><span>SEALS</span><span>C3 Service Corridor, Storage</span></div>
+  <p class="why">Storage has no door of its own, so sealing it means sealing the whole service corridor with it. The largest cut on the station.</p>
+</div>
+
+</div>
+
+<footer>station layout v4 &middot; generated from station.json by build_sector_sheets.py</footer>
+
+<script>/*
+ * OpStation — station map renderer.
+ *
+ * Framework-free. Draws station.json onto a 2D canvas and hit-tests door clicks.
+ * The Angular component wraps this; station/preview.html uses it directly.
+ *
+ *   const view = new StationView(canvas, station, { onDoorClick: id => {...} });
+ *   view.setDoorState('D5', 'closed');
+ *   view.setDoorStates({ D1: 'open', H3: 'closed' });
+ *
+ * Drawing model, in order:
+ *   1. hatched space over the whole field
+ *   2. every area filled flat, no outline — so a multi-rect area (the T-shaped
+ *      corridors) reads as one shape, and there are no borders to look tidy
+ *   3. a dark seam on every edge shared by two DIFFERENT areas — this is the only
+ *      line work on the map, and it is what separates Living Quarters from the
+ *      Observation Deck
+ *   4. doorless passages: the seam is broken and jamb ticks are drawn, so an
+ *      opening looks like an opening
+ *   5. door bars, hot green or hot red, on top of the seam
+ */
+
+const THEME = {
+  space:        '#000000',
+  spaceHatch:   '#131313',
+  corridor:     '#4a4f52',
+  room:         '#2e3234',
+  hangarBay:    '#3b4043',
+  seam:         '#0a0a0a',
+  jamb:         '#b8c0c4',
+  threshold:    '#7d8589',
+
+  doorOpen:     '#00ff40',
+  doorClosed:   '#ff1a1a',
+  hover:        '#ffff00',
+  sealed:       'rgba(255, 176, 0, 0.20)',
+  sealedEdge:   '#ffb000',
+
+  areaLabel:    '#e8ecec',
+  areaSub:      '#9aa3a5',
+  corridorLbl:  '#00e5ff',
+  doorLabel:    '#ffffff',
+  exterior:     '#4d5457',
+
+  font:         'Courier New, Courier, monospace',
+};
+
+const DOOR_THICKNESS = 11;  // px at scale 1
+const SEAM_WIDTH     = 3;
+const HIT_INFLATE    = 8;
+const EPS            = 1e-6;
+
+class StationView {
+  constructor(canvas, station, opts = {}) {
+    this.canvas = canvas;
+    this.station = station;
+    this.onDoorClick = opts.onDoorClick || null;
+    this.interactive = opts.interactive !== false;
+    this.showLabels = opts.showLabels !== false;
+    // compact: drop secondary and exterior labels and shorten corridor names,
+    // for small print cards. subLabels alone drops just the second line.
+    this.compact = opts.compact === true;
+    this.subLabels = opts.subLabels !== false && !this.compact;
+
+    this.doorStates = {};
+    for (const d of station.doors) this.doorStates[d.id] = d.initial;
+
+    this.fill = {};
+    for (const a of station.areas) {
+      this.fill[a.id] = a.kind === 'corridor' ? THEME.corridor
+                      : a.kind === 'hangar_bay' ? THEME.hangarBay
+                      : THEME.room;
+    }
+
+    this.seams = this._computeSeams();
+    this.highlight = [];   // area ids drawn as a sealed volume
+    this.hoverId = null;
+    this._bind();
+    this.resize();
+  }
+
+  /* ---------------- public API ---------------- */
+
+  setDoorState(id, state) {
+    if (!(id in this.doorStates)) throw new Error('unknown door ' + id);
+    this.doorStates[id] = state;
+    this.draw();
+  }
+
+  setDoorStates(map) {
+    for (const [id, state] of Object.entries(map)) {
+      if (id in this.doorStates) this.doorStates[id] = state;
+    }
+    this.draw();
+  }
+
+  getDoorState(id) { return this.doorStates[id]; }
+
+  /* Tint a set of areas as a sealed volume. Pass [] to clear. */
+  setHighlight(areaIds) {
+    this.highlight = areaIds || [];
+    this.draw();
+  }
+
+  resize() {
+    const g = this.station.grid;
+    const dpr = window.devicePixelRatio || 1;
+    const box = this.canvas.parentElement || this.canvas;
+    const availW = box.clientWidth || g.cols * g.cell;
+    const availH = box.clientHeight || g.rows * g.cell;
+
+    this.scale = Math.min(availW / (g.cols * g.cell), availH / (g.rows * g.cell));
+    this.dpr = dpr;
+
+    const w = g.cols * g.cell * this.scale;
+    const h = g.rows * g.cell * this.scale;
+    this.canvas.style.width = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.draw();
+  }
+
+  /* ---------------- geometry ---------------- */
+
+  gx(v) { return v * this.station.grid.cell * this.scale * this.dpr; }
+
+  barRect(bar) {
+    const t = DOOR_THICKNESS * this.scale * this.dpr;
+    const x = this.gx(bar.x), y = this.gx(bar.y), L = this.gx(bar.len);
+    return bar.orient === 'h'
+      ? { x, y: y - t / 2, w: L, h: t }
+      : { x: x - t / 2, y, w: t, h: L };
+  }
+
+  doorAt(px, py) {
+    const pad = HIT_INFLATE * this.scale * this.dpr;
+    for (const d of this.station.doors) {
+      const r = this.barRect(d.bar);
+      if (px >= r.x - pad && px <= r.x + r.w + pad &&
+          py >= r.y - pad && py <= r.y + r.h + pad) return d;
+    }
+    return null;
+  }
+
+  /*
+   * Every edge segment shared by two DIFFERENT areas. Rects of the same area
+   * are skipped, which is what lets a T-shaped corridor read as one shape.
+   */
+  _computeSeams() {
+    const out = [];
+    const areas = this.station.areas;
+
+    for (let i = 0; i < areas.length; i++) {
+      for (let j = i + 1; j < areas.length; j++) {
+        for (const [ax, ay, aw, ah] of areas[i].rects) {
+          for (const [bx, by, bw, bh] of areas[j].rects) {
+            // vertical touch: a's bottom on b's top, or vice versa
+            for (const [ya, yb] of [[ay + ah, by], [by + bh, ay]]) {
+              if (Math.abs(ya - yb) < EPS) {
+                const x0 = Math.max(ax, bx), x1 = Math.min(ax + aw, bx + bw);
+                if (x1 - x0 > EPS) out.push({ orient: 'h', y: ya, x0, x1 });
+              }
+            }
+            // horizontal touch: a's right on b's left, or vice versa
+            for (const [xa, xb] of [[ax + aw, bx], [bx + bw, ax]]) {
+              if (Math.abs(xa - xb) < EPS) {
+                const y0 = Math.max(ay, by), y1 = Math.min(ay + ah, by + bh);
+                if (y1 - y0 > EPS) out.push({ orient: 'v', x: xa, y0, y1 });
+              }
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /* ---------------- drawing ---------------- */
+
+  draw() {
+    const ctx = this.canvas.getContext('2d');
+    this._drawSpace(ctx);
+    for (const a of this.station.areas) this._fillArea(ctx, a);
+    this._drawSeams(ctx);
+    this._drawHighlight(ctx);
+    for (const p of this.station.passages) this._drawPassage(ctx, p);
+    for (const d of this.station.doors) this._drawDoor(ctx, d);
+    if (this.showLabels) {
+      for (const a of this.station.areas) this._labelArea(ctx, a);
+      for (const d of this.station.doors) this._labelDoor(ctx, d);
+      this._drawExteriorLabels(ctx);
+    }
+  }
+
+  _drawSpace(ctx) {
+    ctx.fillStyle = THEME.space;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.strokeStyle = THEME.spaceHatch;
+    ctx.lineWidth = 1 * this.dpr;
+    const step = 12 * this.scale * this.dpr;
+    ctx.beginPath();
+    for (let x = -this.canvas.height; x < this.canvas.width; x += step) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + this.canvas.height, this.canvas.height);
+    }
+    ctx.stroke();
+  }
+
+  _fillArea(ctx, area) {
+    ctx.fillStyle = this.fill[area.id];
+    for (const [x, y, w, h] of area.rects) {
+      ctx.fillRect(this.gx(x), this.gx(y), this.gx(w), this.gx(h));
+    }
+  }
+
+  /*
+   * A sealed volume: tint every rect of every area inside it. Drawn under the
+   * doors so the cut-set stays the most prominent thing on screen.
+   */
+  _drawHighlight(ctx) {
+    if (!this.highlight.length) return;
+    const set = new Set(this.highlight);
+    ctx.fillStyle = THEME.sealed;
+    for (const a of this.station.areas) {
+      if (!set.has(a.id)) continue;
+      for (const [x, y, w, h] of a.rects) {
+        ctx.fillRect(this.gx(x), this.gx(y), this.gx(w), this.gx(h));
+      }
+    }
+  }
+
+  _drawSeams(ctx) {
+    ctx.strokeStyle = THEME.seam;
+    ctx.lineWidth = SEAM_WIDTH * this.scale * this.dpr;
+    ctx.beginPath();
+    for (const s of this.seams) {
+      if (s.orient === 'h') {
+        ctx.moveTo(this.gx(s.x0), this.gx(s.y));
+        ctx.lineTo(this.gx(s.x1), this.gx(s.y));
+      } else {
+        ctx.moveTo(this.gx(s.x), this.gx(s.y0));
+        ctx.lineTo(this.gx(s.x), this.gx(s.y1));
+      }
+    }
+    ctx.stroke();
+  }
+
+  /*
+   * A doorless passage: break the seam over the opening, then mark the two
+   * jambs. Reads as a gap in the wall rather than as an unexplained bar.
+   */
+  _drawPassage(ctx, p) {
+    const b = p.bar;
+    const s = this.scale * this.dpr;
+    const jamb = 9 * s;
+
+    const a0 = this.gx(b.x), b0 = this.gx(b.y);
+    const a1 = b.orient === 'h' ? this.gx(b.x + b.len) : a0;
+    const b1 = b.orient === 'h' ? b0 : this.gx(b.y + b.len);
+
+    // 1. erase the seam over the opening
+    ctx.strokeStyle = this.fill[p.between[0]];
+    ctx.lineWidth = (SEAM_WIDTH + 2) * s;
+    ctx.beginPath();
+    ctx.moveTo(a0, b0);
+    ctx.lineTo(a1, b1);
+    ctx.stroke();
+
+    // 2. pale threshold band across it — this is what makes it read as walkable
+    ctx.strokeStyle = THEME.threshold;
+    ctx.lineWidth = 2 * s;
+    ctx.setLineDash([3 * s, 3 * s]);
+    ctx.beginPath();
+    ctx.moveTo(a0, b0);
+    ctx.lineTo(a1, b1);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 3. jamb ticks at both ends, perpendicular to the wall
+    ctx.strokeStyle = THEME.jamb;
+    ctx.lineWidth = 3 * s;
+    ctx.beginPath();
+    if (b.orient === 'h') {
+      for (const gx of [a0, a1]) {
+        ctx.moveTo(gx, b0 - jamb);
+        ctx.lineTo(gx, b0 + jamb);
+      }
+    } else {
+      for (const gy of [b0, b1]) {
+        ctx.moveTo(a0 - jamb, gy);
+        ctx.lineTo(a0 + jamb, gy);
+      }
+    }
+    ctx.stroke();
+  }
+
+  _drawDoor(ctx, d) {
+    const r = this.barRect(d.bar);
+    const open = this.doorStates[d.id] === 'open';
+    ctx.fillStyle = open ? THEME.doorOpen : THEME.doorClosed;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+
+    if (open) {
+      // an open door reads as a gap: punch the middle out
+      ctx.fillStyle = THEME.space;
+      const inset = 3 * this.scale * this.dpr;
+      if (d.bar.orient === 'h') ctx.fillRect(r.x + inset, r.y + inset, r.w - inset * 2, r.h - inset * 2);
+      else                      ctx.fillRect(r.x + inset, r.y + inset, r.w - inset * 2, r.h - inset * 2);
+    }
+
+    if (this.hoverId === d.id) {
+      const pad = HIT_INFLATE * this.scale * this.dpr;
+      ctx.strokeStyle = THEME.hover;
+      ctx.lineWidth = 2 * this.dpr;
+      ctx.strokeRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+    }
+  }
+
+  _font(px, bold) {
+    const s = Math.max(8, px * this.scale * this.dpr);
+    return `${bold ? 'bold ' : ''}${s}px ${THEME.font}`;
+  }
+
+  _labelArea(ctx, area) {
+    const big = area.rects.reduce((a, b) => (a[2] * a[3] >= b[2] * b[3] ? a : b));
+    const cx = this.gx(big[0] + big[2] / 2);
+    const cy = this.gx(big[1] + big[3] / 2);
+    const s = this.scale * this.dpr;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (area.kind === 'corridor') {
+      ctx.font = this._font(12, true);
+      ctx.fillStyle = THEME.corridorLbl;
+      // "C1  NORTH CORRIDOR" -> "C1" when there is no room for the full name
+      ctx.fillText(this.compact ? area.name.split(/\s{2,}/)[0] : area.name, cx, cy);
+      return;
+    }
+
+    ctx.font = this._font(12, true);
+    ctx.fillStyle = THEME.areaLabel;
+    if (area.sub && this.subLabels) {
+      ctx.fillText(area.name, cx, cy - 8 * s);
+      ctx.font = this._font(10, false);
+      ctx.fillStyle = THEME.areaSub;
+      ctx.fillText(area.sub, cx, cy + 8 * s);
+    } else {
+      ctx.fillText(area.name, cx, cy);
+    }
+  }
+
+  _labelDoor(ctx, d) {
+    const r = this.barRect(d.bar);
+    const s = this.scale * this.dpr;
+    const off = 13 * s;
+    // optional per-door nudge in grid cells, for hand-tuning tight spots
+    const nx = this.gx(d.label_nudge ? (d.label_nudge.x || 0) : 0);
+    const ny = this.gx(d.label_nudge ? (d.label_nudge.y || 0) : 0);
+    const cx = r.x + r.w / 2 + nx, cy = r.y + r.h / 2 + ny;
+
+    ctx.font = this._font(12, true);
+    ctx.fillStyle = THEME.doorLabel;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+
+    switch (d.label) {
+      case 'up':    ctx.fillText(d.id, cx, r.y - off + ny); break;
+      case 'down':  ctx.fillText(d.id, cx, r.y + r.h + off + ny); break;
+      case 'left':  ctx.textAlign = 'right'; ctx.fillText(d.id, r.x - off * 0.6 + nx, cy); break;
+      case 'right': ctx.textAlign = 'left';  ctx.fillText(d.id, r.x + r.w + off * 0.6 + nx, cy); break;
+      default:      ctx.fillText(d.id, cx, r.y - off + ny);
+    }
+  }
+
+  _drawExteriorLabels(ctx) {
+    if (this.compact) return;
+    ctx.font = this._font(10, false);
+    ctx.fillStyle = THEME.exterior;
+    ctx.textBaseline = 'middle';
+    for (const l of this.station.exterior_labels || []) {
+      ctx.save();
+      ctx.translate(this.gx(l.x), this.gx(l.y));
+      if (l.rotate) ctx.rotate(l.rotate * Math.PI / 180);
+      ctx.textAlign = l.align || 'center';
+      ctx.fillText(l.text, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  /* ---------------- input ---------------- */
+
+  _bind() {
+    if (!this.interactive) return;
+    const local = ev => {
+      const b = this.canvas.getBoundingClientRect();
+      return [(ev.clientX - b.left) * this.dpr, (ev.clientY - b.top) * this.dpr];
+    };
+
+    this.canvas.addEventListener('mousemove', ev => {
+      const [x, y] = local(ev);
+      const d = this.doorAt(x, y);
+      const id = d ? d.id : null;
+      if (id !== this.hoverId) {
+        this.hoverId = id;
+        this.canvas.style.cursor = id ? 'pointer' : 'default';
+        this.canvas.title = id ? `${id} ${this.doorStates[id].toUpperCase()}` : '';
+        this.draw();
+      }
+    });
+
+    this.canvas.addEventListener('mouseleave', () => {
+      if (this.hoverId) { this.hoverId = null; this.draw(); }
+    });
+
+    this.canvas.addEventListener('click', ev => {
+      const [x, y] = local(ev);
+      const d = this.doorAt(x, y);
+      if (d && this.onDoorClick) this.onDoorClick(d.id, this.doorStates[d.id]);
+    });
+
+    window.addEventListener('resize', () => this.resize());
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { StationView, THEME };
+</script>
+<script>
+const station    = {"version": "v4", "name": "OpStation \u2014 station layout v4", "note": "Fixed forever. Identical in every scenario and every session. Rects are [x, y, w, h] in grid cells; the renderer multiplies by grid.cell. Doors are bars sitting on the shared edge of the two areas they connect. Deliberately asymmetric. Hangar Bay 3 bridges C2 and C3, so the door graph contains a cycle and the service sector cannot be sealed with one door.", "grid": {"cols": 15, "rows": 16.4, "cell": 13.067}, "areas": [{"id": "HB1", "kind": "hangar_bay", "name": "HANGAR BAY 1", "sub": "shuttle dock", "rects": [[2.4, 1.0, 3.0, 2.2]]}, {"id": "HB2", "kind": "hangar_bay", "name": "HANGAR BAY 2", "sub": "visiting berth", "rects": [[7.2, 1.5, 4.0, 1.7]]}, {"id": "HB3", "kind": "hangar_bay", "name": "HANGAR BAY 3", "sub": "security EVA", "rects": [[9.4, 9.6, 3.6, 2.3]]}, {"id": "HB4", "kind": "hangar_bay", "name": "HANGAR BAY 4", "sub": "cargo", "rects": [[4.7, 12.9, 2.6, 2.1]]}, {"id": "HB5", "kind": "hangar_bay", "name": "HANGAR BAY 5", "sub": "construction", "rects": [[7.9, 12.9, 3.0, 2.1]]}, {"id": "MED", "kind": "room", "name": "MEDICAL BAY", "sub": "", "rects": [[1.5, 4.3, 4.2, 2.3]]}, {"id": "LQ", "kind": "room", "name": "LIVING", "sub": "QUARTERS", "rects": [[9.0, 4.3, 4.0, 2.3]]}, {"id": "OBS", "kind": "room", "name": "OBSERVATION", "sub": "DECK", "rects": [[9.0, 6.6, 4.0, 2.0]]}, {"id": "SEC", "kind": "room", "name": "SECURITY", "sub": "", "rects": [[0.4, 9.6, 4.6, 2.3]]}, {"id": "ENG", "kind": "room", "name": "ENGINEERING", "sub": "/ REACTOR", "rects": [[1.5, 12.9, 3.2, 2.1]]}, {"id": "STO", "kind": "room", "name": "STORAGE", "sub": "", "rects": [[11.3, 12.9, 1.7, 2.1]]}, {"id": "C1", "kind": "corridor", "name": "C1  NORTH CORRIDOR", "sub": "", "rects": [[1.5, 3.2, 11.5, 1.1]]}, {"id": "C2", "kind": "corridor", "name": "C2  CENTRAL JUNCTION", "sub": "", "rects": [[1.5, 8.6, 11.5, 1.0], [6.3, 4.3, 1.0, 4.3]]}, {"id": "C3", "kind": "corridor", "name": "C3  SERVICE CORRIDOR", "sub": "", "rects": [[1.5, 11.9, 11.5, 1.0], [7.6, 9.6, 1.0, 2.3]]}], "doors": [{"id": "D1", "kind": "internal", "between": ["HB1", "C1"], "initial": "closed", "label": "up", "bar": {"orient": "h", "x": 3.4, "y": 3.2, "len": 1.0}}, {"id": "D2", "kind": "internal", "between": ["HB2", "C1"], "initial": "closed", "label": "up", "bar": {"orient": "h", "x": 8.7, "y": 3.2, "len": 1.0}}, {"id": "D3", "kind": "internal", "between": ["MED", "C1"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 3.1, "y": 4.3, "len": 1.0}}, {"id": "D4", "kind": "internal", "between": ["C1", "C2"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 6.3, "y": 4.3, "len": 1.0}}, {"id": "D5", "kind": "internal", "between": ["LQ", "C1"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 10.5, "y": 4.3, "len": 1.0}}, {"id": "D6", "kind": "internal", "between": ["SEC", "C2"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 2.6, "y": 9.6, "len": 1.0}}, {"id": "D7", "kind": "internal", "between": ["C2", "C3"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 7.6, "y": 9.6, "len": 1.0}}, {"id": "D8", "kind": "internal", "between": ["HB3", "C2"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 10.7, "y": 9.6, "len": 1.0}}, {"id": "D9", "kind": "internal", "between": ["HB3", "C3"], "initial": "open", "label": "up", "bar": {"orient": "h", "x": 10.7, "y": 11.9, "len": 1.0}}, {"id": "D10", "kind": "internal", "between": ["ENG", "C3"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 2.6, "y": 12.9, "len": 1.0}}, {"id": "D11", "kind": "internal", "between": ["ENG", "HB4"], "initial": "closed", "label": "left", "bar": {"orient": "v", "x": 4.7, "y": 13.5, "len": 1.0}, "label_nudge": {"x": 0.0, "y": 0.62}}, {"id": "D12", "kind": "internal", "between": ["HB4", "C3"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 5.5, "y": 12.9, "len": 1.0}}, {"id": "D13", "kind": "internal", "between": ["HB5", "C3"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 8.9, "y": 12.9, "len": 1.0}}, {"id": "H1", "kind": "hangar", "between": ["HB1", "SPACE"], "initial": "closed", "outward": "up", "label": "up", "bar": {"orient": "h", "x": 3.4, "y": 1.0, "len": 1.0}}, {"id": "H2", "kind": "hangar", "between": ["HB2", "SPACE"], "initial": "closed", "outward": "up", "label": "up", "bar": {"orient": "h", "x": 8.7, "y": 1.5, "len": 1.0}}, {"id": "H3", "kind": "hangar", "between": ["HB3", "SPACE"], "initial": "closed", "outward": "right", "label": "right", "bar": {"orient": "v", "x": 13.0, "y": 10.25, "len": 1.0}}, {"id": "H4", "kind": "hangar", "between": ["HB4", "SPACE"], "initial": "closed", "outward": "down", "label": "down", "bar": {"orient": "h", "x": 5.5, "y": 15.0, "len": 1.0}}, {"id": "H5", "kind": "hangar", "between": ["HB5", "EPSILON"], "initial": "closed", "outward": "down", "label": "down", "bar": {"orient": "h", "x": 8.9, "y": 15.0, "len": 1.0}}], "passages": [{"id": "P1", "between": ["OBS", "LQ"], "bar": {"orient": "h", "x": 10.5, "y": 6.6, "len": 1.0}}, {"id": "P2", "between": ["STO", "C3"], "bar": {"orient": "h", "x": 11.65, "y": 12.9, "len": 1.0}}], "exterior_labels": [{"text": "SPACE", "x": 6.3, "y": 0.5, "align": "center"}, {"text": "SPACE", "x": 14.25, "y": 10.75, "align": "center", "rotate": -90}, {"text": "SPACE", "x": 6.0, "y": 15.9, "align": "center"}, {"text": "EXTENSION EPSILON", "x": 9.4, "y": 15.9, "align": "center"}], "hangar_roles": {"H1": "Passenger and medical shuttle dock", "H2": "Visiting-vessel berth (inspections, damaged ships)", "H3": "Security EVA airlock", "H4": "Cargo hangar, adjacent to Engineering via D11 and to Storage via C3", "H5": "Construction hangar leading to Extension Epsilon"}, "isolation_targets": [{"id": "central_sector", "phrase": "the central sector", "volume": ["C2", "HB3", "SEC"], "cut": ["D4", "D7", "D9"], "hangar_doors_inside": ["H3"], "interior_doors": ["D6", "D8"], "class": "sector"}, {"id": "construction_sector", "phrase": "the construction sector", "volume": ["C3", "HB5", "STO"], "cut": ["D7", "D9", "D10", "D12"], "hangar_doors_inside": ["H5"], "interior_doors": ["D13"], "class": "sector"}, {"id": "engineering_sector", "phrase": "the engineering sector", "volume": ["ENG", "HB4"], "cut": ["D10", "D12"], "hangar_doors_inside": ["H4"], "interior_doors": ["D11"], "class": "sector"}, {"id": "north_sector", "phrase": "the north sector", "volume": ["C1", "HB1", "HB2", "LQ", "MED", "OBS"], "cut": ["D4"], "hangar_doors_inside": ["H1", "H2"], "interior_doors": ["D1", "D2", "D3", "D5"], "class": "sector"}, {"id": "residential_sector", "phrase": "the residential sector", "volume": ["LQ", "OBS"], "cut": ["D5"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}, {"id": "service_sector", "phrase": "the service sector", "volume": ["C3", "ENG", "HB4", "HB5", "STO"], "cut": ["D7", "D9"], "hangar_doors_inside": ["H4", "H5"], "interior_doors": ["D10", "D11", "D12", "D13"], "class": "sector"}, {"id": "storage_sector", "phrase": "the storage sector", "volume": ["C3", "STO"], "cut": ["D7", "D9", "D10", "D12", "D13"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}, {"id": "engineering", "phrase": "Engineering / the reactor", "volume": ["ENG"], "cut": ["D10", "D11"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "medical_bay", "phrase": "the Medical Bay", "volume": ["MED"], "cut": ["D3"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "security", "phrase": "Security", "volume": ["SEC"], "cut": ["D6"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "hangar_bay_1", "phrase": "Hangar Bay 1", "volume": ["HB1"], "cut": ["D1"], "hangar_doors_inside": ["H1"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_2", "phrase": "Hangar Bay 2", "volume": ["HB2"], "cut": ["D2"], "hangar_doors_inside": ["H2"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_3", "phrase": "Hangar Bay 3", "volume": ["HB3"], "cut": ["D8", "D9"], "hangar_doors_inside": ["H3"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_4", "phrase": "Hangar Bay 4", "volume": ["HB4"], "cut": ["D11", "D12"], "hangar_doors_inside": ["H4"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_5", "phrase": "Hangar Bay 5", "volume": ["HB5"], "cut": ["D13"], "hangar_doors_inside": ["H5"], "interior_doors": [], "class": "bay"}, {"id": "central_junction", "phrase": "the central junction", "volume": ["C2"], "cut": ["D4", "D6", "D7", "D8"], "hangar_doors_inside": [], "interior_doors": [], "class": "corridor"}, {"id": "north_corridor", "phrase": "the north corridor", "volume": ["C1"], "cut": ["D1", "D2", "D3", "D4", "D5"], "hangar_doors_inside": [], "interior_doors": [], "class": "corridor"}], "not_isolable": {"note": "A doorless passage crosses the boundary of each of these, so none can be sealed on its own. Storage and C3 can only be sealed together (see the 'storage' target); Living Quarters and the Observation Deck likewise (see 'residential').", "areas": {"STO": "C3 Service Corridor", "C3": "Storage", "OBS": "Living Quarters", "LQ": "Observation Deck"}}, "topology_notes": {"hb3_bypass": "Hangar Bay 3 touches both C2 (D8) and C3 (D9), so the door graph contains a cycle. Sealing the service sector therefore needs D7 AND D9 \u2014 a player who only remembers the obvious junction door leaves the back route open and fails the obligation.", "eng_hb4_adjacency": "Engineering shares a wall with Hangar Bay 4 (D11). Isolating Engineering alone needs D10 and D11; isolating the pair as one block needs D10 and D12 instead.", "remaining_passages": "Only two doorless passages remain: Observation Deck<->Living Quarters and Storage<->C3."}, "door_numbering": "Internal doors are numbered top to bottom in horizontal bands, then left to right within a band. Every area with two doors therefore has consecutive numbers (Hangar Bay 3: D8/D9, Engineering: D10/D11, Hangar Bay 4: D11/D12) and C1 owns exactly D1-D5. Hangar doors H1-H5 match their bay number.", "isolation_vocabulary_note": "The fiction word for a multi-area volume is always 'sector'. Single rooms, bays and corridors keep their own names. Note that construction_sector is nested inside service_sector but needs MORE doors, because excluding Engineering and Hangar Bay 4 turns their corridor doors into boundary doors.", "label_nudge_note": "Optional per-door label offset in grid cells. Only for hand-tuning a label that collides with an area name; it moves the text, never the door.", "isolation_target_classes": {"sector": "A volume spanning more than one area. Not obvious from looking at the map \u2014 which doors bound it has to be learned. These are the ones that get a printed reference card.", "room": "A single room. One boundary, obvious on sight.", "bay": "A single hangar bay. Obvious on sight.", "corridor": "A single corridor. Obvious on sight, though the cut is wide."}};
+const stationBig = {"version": "v4", "name": "OpStation \u2014 station layout v4", "note": "Fixed forever. Identical in every scenario and every session. Rects are [x, y, w, h] in grid cells; the renderer multiplies by grid.cell. Doors are bars sitting on the shared edge of the two areas they connect. Deliberately asymmetric. Hangar Bay 3 bridges C2 and C3, so the door graph contains a cycle and the service sector cannot be sealed with one door.", "grid": {"cols": 15, "rows": 16.4, "cell": 31.333}, "areas": [{"id": "HB1", "kind": "hangar_bay", "name": "HANGAR BAY 1", "sub": "shuttle dock", "rects": [[2.4, 1.0, 3.0, 2.2]]}, {"id": "HB2", "kind": "hangar_bay", "name": "HANGAR BAY 2", "sub": "visiting berth", "rects": [[7.2, 1.5, 4.0, 1.7]]}, {"id": "HB3", "kind": "hangar_bay", "name": "HANGAR BAY 3", "sub": "security EVA", "rects": [[9.4, 9.6, 3.6, 2.3]]}, {"id": "HB4", "kind": "hangar_bay", "name": "HANGAR BAY 4", "sub": "cargo", "rects": [[4.7, 12.9, 2.6, 2.1]]}, {"id": "HB5", "kind": "hangar_bay", "name": "HANGAR BAY 5", "sub": "construction", "rects": [[7.9, 12.9, 3.0, 2.1]]}, {"id": "MED", "kind": "room", "name": "MEDICAL BAY", "sub": "", "rects": [[1.5, 4.3, 4.2, 2.3]]}, {"id": "LQ", "kind": "room", "name": "LIVING", "sub": "QUARTERS", "rects": [[9.0, 4.3, 4.0, 2.3]]}, {"id": "OBS", "kind": "room", "name": "OBSERVATION", "sub": "DECK", "rects": [[9.0, 6.6, 4.0, 2.0]]}, {"id": "SEC", "kind": "room", "name": "SECURITY", "sub": "", "rects": [[0.4, 9.6, 4.6, 2.3]]}, {"id": "ENG", "kind": "room", "name": "ENGINEERING", "sub": "/ REACTOR", "rects": [[1.5, 12.9, 3.2, 2.1]]}, {"id": "STO", "kind": "room", "name": "STORAGE", "sub": "", "rects": [[11.3, 12.9, 1.7, 2.1]]}, {"id": "C1", "kind": "corridor", "name": "C1  NORTH CORRIDOR", "sub": "", "rects": [[1.5, 3.2, 11.5, 1.1]]}, {"id": "C2", "kind": "corridor", "name": "C2  CENTRAL JUNCTION", "sub": "", "rects": [[1.5, 8.6, 11.5, 1.0], [6.3, 4.3, 1.0, 4.3]]}, {"id": "C3", "kind": "corridor", "name": "C3  SERVICE CORRIDOR", "sub": "", "rects": [[1.5, 11.9, 11.5, 1.0], [7.6, 9.6, 1.0, 2.3]]}], "doors": [{"id": "D1", "kind": "internal", "between": ["HB1", "C1"], "initial": "closed", "label": "up", "bar": {"orient": "h", "x": 3.4, "y": 3.2, "len": 1.0}}, {"id": "D2", "kind": "internal", "between": ["HB2", "C1"], "initial": "closed", "label": "up", "bar": {"orient": "h", "x": 8.7, "y": 3.2, "len": 1.0}}, {"id": "D3", "kind": "internal", "between": ["MED", "C1"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 3.1, "y": 4.3, "len": 1.0}}, {"id": "D4", "kind": "internal", "between": ["C1", "C2"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 6.3, "y": 4.3, "len": 1.0}}, {"id": "D5", "kind": "internal", "between": ["LQ", "C1"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 10.5, "y": 4.3, "len": 1.0}}, {"id": "D6", "kind": "internal", "between": ["SEC", "C2"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 2.6, "y": 9.6, "len": 1.0}}, {"id": "D7", "kind": "internal", "between": ["C2", "C3"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 7.6, "y": 9.6, "len": 1.0}}, {"id": "D8", "kind": "internal", "between": ["HB3", "C2"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 10.7, "y": 9.6, "len": 1.0}}, {"id": "D9", "kind": "internal", "between": ["HB3", "C3"], "initial": "open", "label": "up", "bar": {"orient": "h", "x": 10.7, "y": 11.9, "len": 1.0}}, {"id": "D10", "kind": "internal", "between": ["ENG", "C3"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 2.6, "y": 12.9, "len": 1.0}}, {"id": "D11", "kind": "internal", "between": ["ENG", "HB4"], "initial": "closed", "label": "left", "bar": {"orient": "v", "x": 4.7, "y": 13.5, "len": 1.0}, "label_nudge": {"x": 0.0, "y": 0.62}}, {"id": "D12", "kind": "internal", "between": ["HB4", "C3"], "initial": "open", "label": "down", "bar": {"orient": "h", "x": 5.5, "y": 12.9, "len": 1.0}}, {"id": "D13", "kind": "internal", "between": ["HB5", "C3"], "initial": "closed", "label": "down", "bar": {"orient": "h", "x": 8.9, "y": 12.9, "len": 1.0}}, {"id": "H1", "kind": "hangar", "between": ["HB1", "SPACE"], "initial": "closed", "outward": "up", "label": "up", "bar": {"orient": "h", "x": 3.4, "y": 1.0, "len": 1.0}}, {"id": "H2", "kind": "hangar", "between": ["HB2", "SPACE"], "initial": "closed", "outward": "up", "label": "up", "bar": {"orient": "h", "x": 8.7, "y": 1.5, "len": 1.0}}, {"id": "H3", "kind": "hangar", "between": ["HB3", "SPACE"], "initial": "closed", "outward": "right", "label": "right", "bar": {"orient": "v", "x": 13.0, "y": 10.25, "len": 1.0}}, {"id": "H4", "kind": "hangar", "between": ["HB4", "SPACE"], "initial": "closed", "outward": "down", "label": "down", "bar": {"orient": "h", "x": 5.5, "y": 15.0, "len": 1.0}}, {"id": "H5", "kind": "hangar", "between": ["HB5", "EPSILON"], "initial": "closed", "outward": "down", "label": "down", "bar": {"orient": "h", "x": 8.9, "y": 15.0, "len": 1.0}}], "passages": [{"id": "P1", "between": ["OBS", "LQ"], "bar": {"orient": "h", "x": 10.5, "y": 6.6, "len": 1.0}}, {"id": "P2", "between": ["STO", "C3"], "bar": {"orient": "h", "x": 11.65, "y": 12.9, "len": 1.0}}], "exterior_labels": [{"text": "SPACE", "x": 6.3, "y": 0.5, "align": "center"}, {"text": "SPACE", "x": 14.25, "y": 10.75, "align": "center", "rotate": -90}, {"text": "SPACE", "x": 6.0, "y": 15.9, "align": "center"}, {"text": "EXTENSION EPSILON", "x": 9.4, "y": 15.9, "align": "center"}], "hangar_roles": {"H1": "Passenger and medical shuttle dock", "H2": "Visiting-vessel berth (inspections, damaged ships)", "H3": "Security EVA airlock", "H4": "Cargo hangar, adjacent to Engineering via D11 and to Storage via C3", "H5": "Construction hangar leading to Extension Epsilon"}, "isolation_targets": [{"id": "central_sector", "phrase": "the central sector", "volume": ["C2", "HB3", "SEC"], "cut": ["D4", "D7", "D9"], "hangar_doors_inside": ["H3"], "interior_doors": ["D6", "D8"], "class": "sector"}, {"id": "construction_sector", "phrase": "the construction sector", "volume": ["C3", "HB5", "STO"], "cut": ["D7", "D9", "D10", "D12"], "hangar_doors_inside": ["H5"], "interior_doors": ["D13"], "class": "sector"}, {"id": "engineering_sector", "phrase": "the engineering sector", "volume": ["ENG", "HB4"], "cut": ["D10", "D12"], "hangar_doors_inside": ["H4"], "interior_doors": ["D11"], "class": "sector"}, {"id": "north_sector", "phrase": "the north sector", "volume": ["C1", "HB1", "HB2", "LQ", "MED", "OBS"], "cut": ["D4"], "hangar_doors_inside": ["H1", "H2"], "interior_doors": ["D1", "D2", "D3", "D5"], "class": "sector"}, {"id": "residential_sector", "phrase": "the residential sector", "volume": ["LQ", "OBS"], "cut": ["D5"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}, {"id": "service_sector", "phrase": "the service sector", "volume": ["C3", "ENG", "HB4", "HB5", "STO"], "cut": ["D7", "D9"], "hangar_doors_inside": ["H4", "H5"], "interior_doors": ["D10", "D11", "D12", "D13"], "class": "sector"}, {"id": "storage_sector", "phrase": "the storage sector", "volume": ["C3", "STO"], "cut": ["D7", "D9", "D10", "D12", "D13"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}, {"id": "engineering", "phrase": "Engineering / the reactor", "volume": ["ENG"], "cut": ["D10", "D11"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "medical_bay", "phrase": "the Medical Bay", "volume": ["MED"], "cut": ["D3"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "security", "phrase": "Security", "volume": ["SEC"], "cut": ["D6"], "hangar_doors_inside": [], "interior_doors": [], "class": "room"}, {"id": "hangar_bay_1", "phrase": "Hangar Bay 1", "volume": ["HB1"], "cut": ["D1"], "hangar_doors_inside": ["H1"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_2", "phrase": "Hangar Bay 2", "volume": ["HB2"], "cut": ["D2"], "hangar_doors_inside": ["H2"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_3", "phrase": "Hangar Bay 3", "volume": ["HB3"], "cut": ["D8", "D9"], "hangar_doors_inside": ["H3"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_4", "phrase": "Hangar Bay 4", "volume": ["HB4"], "cut": ["D11", "D12"], "hangar_doors_inside": ["H4"], "interior_doors": [], "class": "bay"}, {"id": "hangar_bay_5", "phrase": "Hangar Bay 5", "volume": ["HB5"], "cut": ["D13"], "hangar_doors_inside": ["H5"], "interior_doors": [], "class": "bay"}, {"id": "central_junction", "phrase": "the central junction", "volume": ["C2"], "cut": ["D4", "D6", "D7", "D8"], "hangar_doors_inside": [], "interior_doors": [], "class": "corridor"}, {"id": "north_corridor", "phrase": "the north corridor", "volume": ["C1"], "cut": ["D1", "D2", "D3", "D4", "D5"], "hangar_doors_inside": [], "interior_doors": [], "class": "corridor"}], "not_isolable": {"note": "A doorless passage crosses the boundary of each of these, so none can be sealed on its own. Storage and C3 can only be sealed together (see the 'storage' target); Living Quarters and the Observation Deck likewise (see 'residential').", "areas": {"STO": "C3 Service Corridor", "C3": "Storage", "OBS": "Living Quarters", "LQ": "Observation Deck"}}, "topology_notes": {"hb3_bypass": "Hangar Bay 3 touches both C2 (D8) and C3 (D9), so the door graph contains a cycle. Sealing the service sector therefore needs D7 AND D9 \u2014 a player who only remembers the obvious junction door leaves the back route open and fails the obligation.", "eng_hb4_adjacency": "Engineering shares a wall with Hangar Bay 4 (D11). Isolating Engineering alone needs D10 and D11; isolating the pair as one block needs D10 and D12 instead.", "remaining_passages": "Only two doorless passages remain: Observation Deck<->Living Quarters and Storage<->C3."}, "door_numbering": "Internal doors are numbered top to bottom in horizontal bands, then left to right within a band. Every area with two doors therefore has consecutive numbers (Hangar Bay 3: D8/D9, Engineering: D10/D11, Hangar Bay 4: D11/D12) and C1 owns exactly D1-D5. Hangar doors H1-H5 match their bay number.", "isolation_vocabulary_note": "The fiction word for a multi-area volume is always 'sector'. Single rooms, bays and corridors keep their own names. Note that construction_sector is nested inside service_sector but needs MORE doors, because excluding Engineering and Hangar Bay 4 turns their corridor doors into boundary doors.", "label_nudge_note": "Optional per-door label offset in grid cells. Only for hand-tuning a label that collides with an area name; it moves the text, never the door.", "isolation_target_classes": {"sector": "A volume spanning more than one area. Not obvious from looking at the map \u2014 which doors bound it has to be learned. These are the ones that get a printed reference card.", "room": "A single room. One boundary, obvious on sight.", "bay": "A single hangar bay. Obvious on sight.", "corridor": "A single corridor. Obvious on sight, though the cut is wide."}};
+const targets    = [{"id": "central_sector", "phrase": "the central sector", "volume": ["C2", "HB3", "SEC"], "cut": ["D4", "D7", "D9"], "hangar_doors_inside": ["H3"], "interior_doors": ["D6", "D8"], "class": "sector"}, {"id": "construction_sector", "phrase": "the construction sector", "volume": ["C3", "HB5", "STO"], "cut": ["D7", "D9", "D10", "D12"], "hangar_doors_inside": ["H5"], "interior_doors": ["D13"], "class": "sector"}, {"id": "engineering_sector", "phrase": "the engineering sector", "volume": ["ENG", "HB4"], "cut": ["D10", "D12"], "hangar_doors_inside": ["H4"], "interior_doors": ["D11"], "class": "sector"}, {"id": "north_sector", "phrase": "the north sector", "volume": ["C1", "HB1", "HB2", "LQ", "MED", "OBS"], "cut": ["D4"], "hangar_doors_inside": ["H1", "H2"], "interior_doors": ["D1", "D2", "D3", "D5"], "class": "sector"}, {"id": "residential_sector", "phrase": "the residential sector", "volume": ["LQ", "OBS"], "cut": ["D5"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}, {"id": "service_sector", "phrase": "the service sector", "volume": ["C3", "ENG", "HB4", "HB5", "STO"], "cut": ["D7", "D9"], "hangar_doors_inside": ["H4", "H5"], "interior_doors": ["D10", "D11", "D12", "D13"], "class": "sector"}, {"id": "storage_sector", "phrase": "the storage sector", "volume": ["C3", "STO"], "cut": ["D7", "D9", "D10", "D12", "D13"], "hangar_doors_inside": [], "interior_doors": [], "class": "sector"}];
+
+// page 1: the labelled reference map, no sector selected
+new StationView(document.getElementById('c_reference'), stationBig, { interactive: false, subLabels: false });
+
+// one silhouette card per sector
+for (const t of targets) {
+  const view = new StationView(document.getElementById('c_' + t.id), station,
+                               { interactive: false, showLabels: false });
+  const closed = t.cut.concat(t.hangar_doors_inside);
+  const m = {};
+  for (const d of station.doors) m[d.id] = closed.includes(d.id) ? 'closed' : 'open';
+  view.setDoorStates(m);
+  view.setHighlight(t.volume);
+}
+</script>

@@ -1,0 +1,20 @@
+# generated data
+data/scenarios/*/
+data/sessions/
+!data/scenarios/.gitkeep
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# node / angular
+node_modules/
+dist/
+.angular/
+
+# editors / os
+.DS_Store
+*.swp
