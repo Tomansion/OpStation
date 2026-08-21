@@ -1,0 +1,917 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OpStation — station layout v1</title>
+<style>
+  :root { --bg:#0b0d0e; --panel:#121618; --edge:#293438; --txt:#c8d3d6; --dim:#7d8a90;
+          --open:#2fbf6b; --closed:#d0413f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:12px 'JetBrains Mono','IBM Plex Mono','DejaVu Sans Mono',monospace;
+         display:flex; height:100vh; overflow:hidden; }
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:16px; min-width:0; }
+  canvas { display:block; }
+  aside { width:280px; border-left:1px solid var(--edge); background:var(--panel);
+          padding:16px; overflow-y:auto; flex-shrink:0; }
+  h1 { font-size:12px; letter-spacing:.14em; margin:0 0 4px; text-transform:uppercase; }
+  .sub { color:var(--dim); font-size:10px; margin-bottom:18px; }
+  h2 { font-size:10px; letter-spacing:.14em; color:var(--dim); margin:18px 0 8px;
+       text-transform:uppercase; border-bottom:1px solid var(--edge); padding-bottom:5px; }
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  td { padding:3px 0; }
+  td.id { width:38px; color:var(--txt); }
+  td.st { text-align:right; width:58px; }
+  .open { color:var(--open); } .closed { color:var(--closed); }
+  tr.row { cursor:pointer; }
+  tr.row:hover td { background:#1b2124; }
+  td.link { color:var(--dim); font-size:10px; }
+  button { width:100%; background:#1b2124; color:var(--txt); border:1px solid var(--edge);
+           padding:7px; font:inherit; font-size:10px; letter-spacing:.1em; cursor:pointer;
+           text-transform:uppercase; margin-top:8px; }
+  button:hover { background:#232b2f; }
+  .note { color:var(--dim); font-size:10px; line-height:1.6; margin-top:14px; }
+</style>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<aside>
+  <h1>Station layout v1</h1>
+  <div class="sub">Click a door on the map or in the list to toggle it.</div>
+
+  <h2>Hangar doors</h2>
+  <table id="hangars"></table>
+
+  <h2>Internal doors</h2>
+  <table id="internals"></table>
+
+  <button id="reset">Reset to initial state</button>
+  <button id="allopen">Open everything</button>
+  <button id="allclosed">Close everything</button>
+
+  <div class="note">
+    Doorless passages (grey bars) cannot be operated:
+    Observation Deck &harr; Living Quarters, Storage &harr; C3, Hangar Bay 5 &harr; C3.
+    Hangar Bay 5 has no internal door on purpose — H5 is the only barrier
+    between Extension Epsilon and the interior.
+  </div>
+</aside>
+
+<script>/*
+ * OpStation — station map renderer.
+ *
+ * Framework-free. Draws station.json onto a 2D canvas and hit-tests door clicks.
+ * The Angular component wraps this; station/preview.html uses it directly.
+ *
+ *   const view = new StationView(canvas, station, { onDoorClick: id => {...} });
+ *   view.setDoorState('D5', 'closed');
+ *   view.setDoorStates({ D1: 'open', H3: 'closed' });
+ */
+
+const THEME = {
+  bg:            '#0b0d0e',
+  space:         '#07080a',
+  spaceHatch:    '#141819',
+  corridorFill:  '#171c1e',
+  corridorEdge:  '#39454a',
+  roomFill:      '#13171a',
+  roomEdge:      '#2f3a3e',
+  hangarFill:    '#15191c',
+  hangarEdge:    '#3c4a50',
+  label:         '#8fa0a6',
+  labelDim:      '#5c6a70',
+  doorOpen:      '#2fbf6b',
+  doorClosed:    '#d0413f',
+  doorEdge:      '#0b0d0e',
+  doorLabel:     '#c8d3d6',
+  passage:       '#2a3235',
+  hover:         '#f0c040',
+  font:          "11px 'JetBrains Mono', 'IBM Plex Mono', 'DejaVu Sans Mono', monospace",
+  fontSmall:     "9px 'JetBrains Mono', 'IBM Plex Mono', 'DejaVu Sans Mono', monospace",
+  fontDoor:      "bold 10px 'JetBrains Mono', 'IBM Plex Mono', 'DejaVu Sans Mono', monospace",
+};
+
+const DOOR_THICKNESS = 9;   // px, at scale 1
+const HIT_INFLATE    = 8;   // px, clickable margin around a door bar
+
+class StationView {
+  constructor(canvas, station, opts = {}) {
+    this.canvas  = canvas;
+    this.station = station;
+    this.onDoorClick = opts.onDoorClick || null;
+    this.interactive = opts.interactive !== false;
+    this.showLabels  = opts.showLabels !== false;
+
+    this.doorStates = {};
+    for (const d of station.doors) this.doorStates[d.id] = d.initial;
+
+    this.hoverId = null;
+    this.scale = 1;
+    this.offX = 0;
+    this.offY = 0;
+
+    this._bind();
+    this.resize();
+  }
+
+  /* ---- public API ---- */
+
+  setDoorState(id, state) {
+    if (!(id in this.doorStates)) throw new Error('unknown door ' + id);
+    this.doorStates[id] = state;
+    this.draw();
+  }
+
+  setDoorStates(map) {
+    for (const [id, state] of Object.entries(map)) {
+      if (id in this.doorStates) this.doorStates[id] = state;
+    }
+    this.draw();
+  }
+
+  getDoorState(id) { return this.doorStates[id]; }
+
+  resize() {
+    const g = this.station.grid;
+    const dpr = window.devicePixelRatio || 1;
+    const box = this.canvas.parentElement || this.canvas;
+    const availW = box.clientWidth  || g.cols * g.cell;
+    const availH = box.clientHeight || g.rows * g.cell;
+
+    this.scale = Math.min(availW / (g.cols * g.cell), availH / (g.rows * g.cell));
+    const w = g.cols * g.cell * this.scale;
+    const h = g.rows * g.cell * this.scale;
+
+    this.canvas.style.width  = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.canvas.width  = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.dpr = dpr;
+    this.draw();
+  }
+
+  /* ---- geometry ---- */
+
+  // grid units -> device px
+  gx(v) { return v * this.station.grid.cell * this.scale * this.dpr; }
+
+  barRect(bar) {
+    const t = DOOR_THICKNESS * this.scale * this.dpr;
+    const x = this.gx(bar.x), y = this.gx(bar.y), L = this.gx(bar.len);
+    return bar.orient === 'h'
+      ? { x: x,         y: y - t / 2, w: L, h: t }
+      : { x: x - t / 2, y: y,         w: t, h: L };
+  }
+
+  doorAt(px, py) {
+    const pad = HIT_INFLATE * this.scale * this.dpr;
+    for (const d of this.station.doors) {
+      const r = this.barRect(d.bar);
+      if (px >= r.x - pad && px <= r.x + r.w + pad &&
+          py >= r.y - pad && py <= r.y + r.h + pad) return d;
+    }
+    return null;
+  }
+
+  /* ---- drawing ---- */
+
+  draw() {
+    const ctx = this.canvas.getContext('2d');
+    const g = this.station.grid;
+
+    ctx.fillStyle = THEME.bg;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this._drawSpaceMargins(ctx, g);
+    for (const a of this.station.areas) this._drawArea(ctx, a);
+    for (const p of this.station.passages) this._drawPassage(ctx, p);
+    for (const d of this.station.doors) this._drawDoor(ctx, d);
+    if (this.showLabels) this._drawExteriorLabels(ctx);
+  }
+
+  _drawSpaceMargins(ctx, g) {
+    ctx.fillStyle = THEME.space;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // diagonal hatch over the whole field; the station boxes paint over it
+    ctx.strokeStyle = THEME.spaceHatch;
+    ctx.lineWidth = 1 * this.dpr;
+    const step = 14 * this.scale * this.dpr;
+    ctx.beginPath();
+    for (let x = -this.canvas.height; x < this.canvas.width; x += step) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + this.canvas.height, this.canvas.height);
+    }
+    ctx.stroke();
+  }
+
+  _areaStyle(kind) {
+    if (kind === 'corridor')   return [THEME.corridorFill, THEME.corridorEdge];
+    if (kind === 'hangar_bay') return [THEME.hangarFill,   THEME.hangarEdge];
+    return [THEME.roomFill, THEME.roomEdge];
+  }
+
+  _drawArea(ctx, area) {
+    const [fill, edge] = this._areaStyle(area.kind);
+    ctx.lineWidth = 1.5 * this.scale * this.dpr;
+
+    for (const [x, y, w, h] of area.rects) {
+      const rx = this.gx(x), ry = this.gx(y), rw = this.gx(w), rh = this.gx(h);
+      ctx.fillStyle = fill;
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = edge;
+      ctx.strokeRect(rx, ry, rw, rh);
+    }
+
+    if (!this.showLabels) return;
+
+    // label the largest rect
+    const big = area.rects.reduce((a, b) => (a[2] * a[3] >= b[2] * b[3] ? a : b));
+    const cx = this.gx(big[0] + big[2] / 2);
+    const cy = this.gx(big[1] + big[3] / 2);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const s = this.scale * this.dpr;
+    ctx.font = THEME.font.replace('11px', `${Math.max(8, 11 * s)}px`);
+    ctx.fillStyle = area.kind === 'corridor' ? THEME.labelDim : THEME.label;
+
+    if (area.sub) {
+      ctx.fillText(area.name, cx, cy - 7 * s);
+      ctx.font = THEME.fontSmall.replace('9px', `${Math.max(7, 9 * s)}px`);
+      ctx.fillStyle = THEME.labelDim;
+      ctx.fillText(area.sub, cx, cy + 7 * s);
+    } else {
+      ctx.fillText(area.name, cx, cy);
+    }
+  }
+
+  _drawPassage(ctx, p) {
+    const r = this.barRect(p.bar);
+    ctx.fillStyle = THEME.passage;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+
+  _drawDoor(ctx, d) {
+    const r = this.barRect(d.bar);
+    const open = this.doorStates[d.id] === 'open';
+
+    if (open) {
+      // an open door reads as a gap: thin outline, hollow centre
+      ctx.strokeStyle = THEME.doorOpen;
+      ctx.lineWidth = 2 * this.scale * this.dpr;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = THEME.bg;
+      ctx.fillRect(r.x + r.w * 0.18, r.y + r.h * 0.18, r.w * 0.64, r.h * 0.64);
+    } else {
+      ctx.fillStyle = THEME.doorClosed;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = THEME.doorEdge;
+      ctx.lineWidth = 1 * this.dpr;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+
+    if (this.hoverId === d.id) {
+      const pad = HIT_INFLATE * this.scale * this.dpr;
+      ctx.strokeStyle = THEME.hover;
+      ctx.lineWidth = 1.5 * this.dpr;
+      ctx.strokeRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+    }
+
+    if (!this.showLabels) return;
+
+    const s = this.scale * this.dpr;
+    ctx.font = THEME.fontDoor.replace('10px', `${Math.max(8, 10 * s)}px`);
+    ctx.fillStyle = THEME.doorLabel;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const off = 15 * s;
+    if (d.bar.orient === 'h') {
+      // hangar doors label outward, internal doors label to the side
+      const above = d.outward === 'up' || (!d.outward && d.bar.x < 6);
+      ctx.fillText(d.id, r.x + r.w / 2, above ? r.y - off : r.y + r.h + off);
+    } else {
+      ctx.fillText(d.id, d.outward === 'right' ? r.x + r.w + off * 1.4 : r.x - off * 1.4, r.y + r.h / 2);
+    }
+  }
+
+  _drawExteriorLabels(ctx) {
+    const s = this.scale * this.dpr;
+    ctx.font = THEME.fontSmall.replace('9px', `${Math.max(7, 9 * s)}px`);
+    ctx.fillStyle = THEME.labelDim;
+    ctx.textBaseline = 'middle';
+    for (const l of this.station.exterior_labels || []) {
+      ctx.save();
+      ctx.translate(this.gx(l.x), this.gx(l.y));
+      if (l.rotate) ctx.rotate(l.rotate * Math.PI / 180);
+      ctx.textAlign = l.align || 'center';
+      ctx.fillText(l.text, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  /* ---- input ---- */
+
+  _bind() {
+    if (!this.interactive) return;
+    const local = ev => {
+      const b = this.canvas.getBoundingClientRect();
+      return [(ev.clientX - b.left) * this.dpr, (ev.clientY - b.top) * this.dpr];
+    };
+
+    this.canvas.addEventListener('mousemove', ev => {
+      const [x, y] = local(ev);
+      const d = this.doorAt(x, y);
+      const id = d ? d.id : null;
+      if (id !== this.hoverId) {
+        this.hoverId = id;
+        this.canvas.style.cursor = id ? 'pointer' : 'default';
+        this.canvas.title = id ? `${id} — ${this.doorStates[id]}` : '';
+        this.draw();
+      }
+    });
+
+    this.canvas.addEventListener('mouseleave', () => {
+      if (this.hoverId) { this.hoverId = null; this.draw(); }
+    });
+
+    this.canvas.addEventListener('click', ev => {
+      const [x, y] = local(ev);
+      const d = this.doorAt(x, y);
+      if (d && this.onDoorClick) this.onDoorClick(d.id, this.doorStates[d.id]);
+    });
+
+    window.addEventListener('resize', () => this.resize());
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { StationView, THEME };
+</script>
+<script>
+(function () {
+  const station = {
+  "version": "v1",
+  "name": "OpStation \u2014 station layout v1",
+  "note": "Fixed forever. Identical in every scenario and every session. Grid units are cells; the renderer multiplies by grid.cell.",
+  "grid": {
+    "cols": 14,
+    "rows": 17,
+    "cell": 56
+  },
+  "areas": [
+    {
+      "id": "HB1",
+      "kind": "hangar_bay",
+      "name": "HANGAR BAY 1",
+      "sub": "shuttle dock",
+      "rects": [
+        [
+          3.0,
+          1.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "HB2",
+      "kind": "hangar_bay",
+      "name": "HANGAR BAY 2",
+      "sub": "visiting berth",
+      "rects": [
+        [
+          8.0,
+          1.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "HB3",
+      "kind": "hangar_bay",
+      "name": "HANGAR BAY 3",
+      "sub": "security EVA",
+      "rects": [
+        [
+          10.0,
+          9.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "HB4",
+      "kind": "hangar_bay",
+      "name": "HANGAR BAY 4",
+      "sub": "cargo",
+      "rects": [
+        [
+          4.2,
+          14.0,
+          2.6,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "HB5",
+      "kind": "hangar_bay",
+      "name": "HANGAR BAY 5",
+      "sub": "construction",
+      "rects": [
+        [
+          7.2,
+          14.0,
+          2.6,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "MED",
+      "kind": "room",
+      "name": "MEDICAL BAY",
+      "sub": "",
+      "rects": [
+        [
+          1.0,
+          4.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "LQ",
+      "kind": "room",
+      "name": "LIVING",
+      "sub": "QUARTERS",
+      "rects": [
+        [
+          10.0,
+          4.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "OBS",
+      "kind": "room",
+      "name": "OBSERVATION",
+      "sub": "DECK",
+      "rects": [
+        [
+          10.0,
+          6.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "SEC",
+      "kind": "room",
+      "name": "SECURITY",
+      "sub": "",
+      "rects": [
+        [
+          1.0,
+          9.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "ENG",
+      "kind": "room",
+      "name": "ENGINEERING",
+      "sub": "/ REACTOR",
+      "rects": [
+        [
+          1.0,
+          14.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "STO",
+      "kind": "room",
+      "name": "STORAGE",
+      "sub": "",
+      "rects": [
+        [
+          10.0,
+          14.0,
+          3.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "id": "C1",
+      "kind": "corridor",
+      "name": "C1  NORTH CORRIDOR",
+      "sub": "",
+      "rects": [
+        [
+          1.0,
+          3.0,
+          12.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "C2",
+      "kind": "corridor",
+      "name": "C2  CENTRAL JUNCTION",
+      "sub": "",
+      "rects": [
+        [
+          1.0,
+          8.0,
+          12.0,
+          1.0
+        ],
+        [
+          6.0,
+          4.0,
+          2.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "id": "C3",
+      "kind": "corridor",
+      "name": "C3  SERVICE CORRIDOR",
+      "sub": "",
+      "rects": [
+        [
+          1.0,
+          13.0,
+          12.0,
+          1.0
+        ],
+        [
+          6.0,
+          9.0,
+          2.0,
+          4.0
+        ]
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "id": "D1",
+      "kind": "internal",
+      "between": [
+        "HB1",
+        "C1"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 4.0,
+        "y": 3.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D2",
+      "kind": "internal",
+      "between": [
+        "HB2",
+        "C1"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 9.0,
+        "y": 3.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D3",
+      "kind": "internal",
+      "between": [
+        "MED",
+        "C1"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 2.0,
+        "y": 4.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D4",
+      "kind": "internal",
+      "between": [
+        "LQ",
+        "C1"
+      ],
+      "initial": "open",
+      "bar": {
+        "orient": "h",
+        "x": 11.0,
+        "y": 4.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D5",
+      "kind": "internal",
+      "between": [
+        "C1",
+        "C2"
+      ],
+      "initial": "open",
+      "bar": {
+        "orient": "h",
+        "x": 6.5,
+        "y": 4.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D6",
+      "kind": "internal",
+      "between": [
+        "SEC",
+        "C2"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 2.0,
+        "y": 9.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D7",
+      "kind": "internal",
+      "between": [
+        "HB3",
+        "C2"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 11.0,
+        "y": 9.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D8",
+      "kind": "internal",
+      "between": [
+        "C2",
+        "C3"
+      ],
+      "initial": "open",
+      "bar": {
+        "orient": "h",
+        "x": 6.5,
+        "y": 9.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D9",
+      "kind": "internal",
+      "between": [
+        "ENG",
+        "C3"
+      ],
+      "initial": "closed",
+      "bar": {
+        "orient": "h",
+        "x": 2.0,
+        "y": 14.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "D10",
+      "kind": "internal",
+      "between": [
+        "HB4",
+        "C3"
+      ],
+      "initial": "open",
+      "bar": {
+        "orient": "h",
+        "x": 5.0,
+        "y": 14.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "H1",
+      "kind": "hangar",
+      "between": [
+        "HB1",
+        "SPACE"
+      ],
+      "initial": "closed",
+      "outward": "up",
+      "bar": {
+        "orient": "h",
+        "x": 4.0,
+        "y": 1.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "H2",
+      "kind": "hangar",
+      "between": [
+        "HB2",
+        "SPACE"
+      ],
+      "initial": "closed",
+      "outward": "up",
+      "bar": {
+        "orient": "h",
+        "x": 9.0,
+        "y": 1.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "H3",
+      "kind": "hangar",
+      "between": [
+        "HB3",
+        "SPACE"
+      ],
+      "initial": "closed",
+      "outward": "right",
+      "bar": {
+        "orient": "v",
+        "x": 13.0,
+        "y": 9.5,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "H4",
+      "kind": "hangar",
+      "between": [
+        "HB4",
+        "SPACE"
+      ],
+      "initial": "closed",
+      "outward": "down",
+      "bar": {
+        "orient": "h",
+        "x": 5.0,
+        "y": 16.0,
+        "len": 1.0
+      }
+    },
+    {
+      "id": "H5",
+      "kind": "hangar",
+      "between": [
+        "HB5",
+        "EPSILON"
+      ],
+      "initial": "closed",
+      "outward": "down",
+      "bar": {
+        "orient": "h",
+        "x": 8.0,
+        "y": 16.0,
+        "len": 1.0
+      }
+    }
+  ],
+  "passages": [
+    {
+      "between": [
+        "OBS",
+        "LQ"
+      ],
+      "bar": {
+        "orient": "h",
+        "x": 11.0,
+        "y": 6.0,
+        "len": 1.0
+      }
+    },
+    {
+      "between": [
+        "STO",
+        "C3"
+      ],
+      "bar": {
+        "orient": "h",
+        "x": 11.0,
+        "y": 14.0,
+        "len": 1.0
+      }
+    },
+    {
+      "between": [
+        "HB5",
+        "C3"
+      ],
+      "bar": {
+        "orient": "h",
+        "x": 8.0,
+        "y": 14.0,
+        "len": 1.0
+      }
+    }
+  ],
+  "exterior_labels": [
+    {
+      "text": "SPACE",
+      "x": 7.0,
+      "y": 0.5,
+      "align": "center"
+    },
+    {
+      "text": "SPACE",
+      "x": 13.5,
+      "y": 10.0,
+      "align": "center",
+      "rotate": -90
+    },
+    {
+      "text": "SPACE",
+      "x": 5.5,
+      "y": 16.6,
+      "align": "center"
+    },
+    {
+      "text": "EXTENSION EPSILON",
+      "x": 8.5,
+      "y": 16.6,
+      "align": "center"
+    }
+  ],
+  "hangar_roles": {
+    "H1": "Passenger and medical shuttle dock",
+    "H2": "Visiting-vessel berth (inspections, damaged ships)",
+    "H3": "Security EVA airlock",
+    "H4": "Cargo hangar, adjacent to Storage via C3",
+    "H5": "Construction hangar leading to Extension Epsilon"
+  }
+};
+  const view = new StationView(document.getElementById('c'), station, {
+    onDoorClick: id => toggle(id)
+  });
+
+  const rowsFor = (tbody, doors) => {
+    tbody.innerHTML = '';
+    for (const d of doors) {
+      const st = view.getDoorState(d.id);
+      const tr = document.createElement('tr');
+      tr.className = 'row';
+      const link = d.between.join(' ↔ ');
+      tr.innerHTML = `<td class="id">${d.id}</td>` +
+                     `<td class="link">${link}</td>` +
+                     `<td class="st ${st}">${st.toUpperCase()}</td>`;
+      tr.onclick = () => toggle(d.id);
+      tbody.appendChild(tr);
+    }
+  };
+
+  const refresh = () => {
+    rowsFor(document.getElementById('hangars'),   station.doors.filter(d => d.kind === 'hangar'));
+    rowsFor(document.getElementById('internals'), station.doors.filter(d => d.kind === 'internal'));
+  };
+
+  const toggle = id => {
+    view.setDoorState(id, view.getDoorState(id) === 'open' ? 'closed' : 'open');
+    refresh();
+  };
+
+  const setAll = state => {
+    const m = {};
+    for (const d of station.doors) m[d.id] = state === null ? d.initial : state;
+    view.setDoorStates(m);
+    refresh();
+  };
+
+  document.getElementById('reset').onclick     = () => setAll(null);
+  document.getElementById('allopen').onclick   = () => setAll('open');
+  document.getElementById('allclosed').onclick = () => setAll('closed');
+
+  refresh();
+  window.addEventListener('resize', () => view.resize());
+})();
+</script>

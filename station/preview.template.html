@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OpStation — station layout v1</title>
+<style>
+  :root { --bg:#0b0d0e; --panel:#121618; --edge:#293438; --txt:#c8d3d6; --dim:#7d8a90;
+          --open:#2fbf6b; --closed:#d0413f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:12px 'JetBrains Mono','IBM Plex Mono','DejaVu Sans Mono',monospace;
+         display:flex; height:100vh; overflow:hidden; }
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:16px; min-width:0; }
+  canvas { display:block; }
+  aside { width:280px; border-left:1px solid var(--edge); background:var(--panel);
+          padding:16px; overflow-y:auto; flex-shrink:0; }
+  h1 { font-size:12px; letter-spacing:.14em; margin:0 0 4px; text-transform:uppercase; }
+  .sub { color:var(--dim); font-size:10px; margin-bottom:18px; }
+  h2 { font-size:10px; letter-spacing:.14em; color:var(--dim); margin:18px 0 8px;
+       text-transform:uppercase; border-bottom:1px solid var(--edge); padding-bottom:5px; }
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  td { padding:3px 0; }
+  td.id { width:38px; color:var(--txt); }
+  td.st { text-align:right; width:58px; }
+  .open { color:var(--open); } .closed { color:var(--closed); }
+  tr.row { cursor:pointer; }
+  tr.row:hover td { background:#1b2124; }
+  td.link { color:var(--dim); font-size:10px; }
+  button { width:100%; background:#1b2124; color:var(--txt); border:1px solid var(--edge);
+           padding:7px; font:inherit; font-size:10px; letter-spacing:.1em; cursor:pointer;
+           text-transform:uppercase; margin-top:8px; }
+  button:hover { background:#232b2f; }
+  .note { color:var(--dim); font-size:10px; line-height:1.6; margin-top:14px; }
+</style>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<aside>
+  <h1>Station layout v1</h1>
+  <div class="sub">Click a door on the map or in the list to toggle it.</div>
+
+  <h2>Hangar doors</h2>
+  <table id="hangars"></table>
+
+  <h2>Internal doors</h2>
+  <table id="internals"></table>
+
+  <button id="reset">Reset to initial state</button>
+  <button id="allopen">Open everything</button>
+  <button id="allclosed">Close everything</button>
+
+  <div class="note">
+    Doorless passages (grey bars) cannot be operated:
+    Observation Deck &harr; Living Quarters, Storage &harr; C3, Hangar Bay 5 &harr; C3.
+    Hangar Bay 5 has no internal door on purpose — H5 is the only barrier
+    between Extension Epsilon and the interior.
+  </div>
+</aside>
+
+<script>/*__RENDER_JS__*/</script>
+<script>
+(function () {
+  const station = /*__STATION_JSON__*/;
+  const view = new StationView(document.getElementById('c'), station, {
+    onDoorClick: id => toggle(id)
+  });
+
+  const rowsFor = (tbody, doors) => {
+    tbody.innerHTML = '';
+    for (const d of doors) {
+      const st = view.getDoorState(d.id);
+      const tr = document.createElement('tr');
+      tr.className = 'row';
+      const link = d.between.join(' ↔ ');
+      tr.innerHTML = `<td class="id">${d.id}</td>` +
+                     `<td class="link">${link}</td>` +
+                     `<td class="st ${st}">${st.toUpperCase()}</td>`;
+      tr.onclick = () => toggle(d.id);
+      tbody.appendChild(tr);
+    }
+  };
+
+  const refresh = () => {
+    rowsFor(document.getElementById('hangars'),   station.doors.filter(d => d.kind === 'hangar'));
+    rowsFor(document.getElementById('internals'), station.doors.filter(d => d.kind === 'internal'));
+  };
+
+  const toggle = id => {
+    view.setDoorState(id, view.getDoorState(id) === 'open' ? 'closed' : 'open');
+    refresh();
+  };
+
+  const setAll = state => {
+    const m = {};
+    for (const d of station.doors) m[d.id] = state === null ? d.initial : state;
+    view.setDoorStates(m);
+    refresh();
+  };
+
+  document.getElementById('reset').onclick     = () => setAll(null);
+  document.getElementById('allopen').onclick   = () => setAll('open');
+  document.getElementById('allclosed').onclick = () => setAll('closed');
+
+  refresh();
+  window.addEventListener('resize', () => view.resize());
+})();
+</script>

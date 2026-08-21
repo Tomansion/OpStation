@@ -1,0 +1,66 @@
+{
+  "version": "v1",
+  "name": "OpStation — station layout v1",
+  "note": "Fixed forever. Identical in every scenario and every session. Grid units are cells; the renderer multiplies by grid.cell.",
+
+  "grid": { "cols": 14, "rows": 17, "cell": 56 },
+
+  "areas": [
+    { "id": "HB1", "kind": "hangar_bay", "name": "HANGAR BAY 1", "sub": "shuttle dock",     "rects": [[3.0, 1.0, 3.0, 2.0]] },
+    { "id": "HB2", "kind": "hangar_bay", "name": "HANGAR BAY 2", "sub": "visiting berth",   "rects": [[8.0, 1.0, 3.0, 2.0]] },
+    { "id": "HB3", "kind": "hangar_bay", "name": "HANGAR BAY 3", "sub": "security EVA",     "rects": [[10.0, 9.0, 3.0, 2.0]] },
+    { "id": "HB4", "kind": "hangar_bay", "name": "HANGAR BAY 4", "sub": "cargo",            "rects": [[4.2, 14.0, 2.6, 2.0]] },
+    { "id": "HB5", "kind": "hangar_bay", "name": "HANGAR BAY 5", "sub": "construction",     "rects": [[7.2, 14.0, 2.6, 2.0]] },
+
+    { "id": "MED", "kind": "room", "name": "MEDICAL BAY",   "sub": "",          "rects": [[1.0, 4.0, 3.0, 2.0]] },
+    { "id": "LQ",  "kind": "room", "name": "LIVING",        "sub": "QUARTERS",  "rects": [[10.0, 4.0, 3.0, 2.0]] },
+    { "id": "OBS", "kind": "room", "name": "OBSERVATION",   "sub": "DECK",      "rects": [[10.0, 6.0, 3.0, 2.0]] },
+    { "id": "SEC", "kind": "room", "name": "SECURITY",      "sub": "",          "rects": [[1.0, 9.0, 3.0, 2.0]] },
+    { "id": "ENG", "kind": "room", "name": "ENGINEERING",   "sub": "/ REACTOR", "rects": [[1.0, 14.0, 3.0, 2.0]] },
+    { "id": "STO", "kind": "room", "name": "STORAGE",       "sub": "",          "rects": [[10.0, 14.0, 3.0, 2.0]] },
+
+    { "id": "C1", "kind": "corridor", "name": "C1  NORTH CORRIDOR",   "sub": "", "rects": [[1.0, 3.0, 12.0, 1.0]] },
+    { "id": "C2", "kind": "corridor", "name": "C2  CENTRAL JUNCTION", "sub": "", "rects": [[1.0, 8.0, 12.0, 1.0], [6.0, 4.0, 2.0, 4.0]] },
+    { "id": "C3", "kind": "corridor", "name": "C3  SERVICE CORRIDOR", "sub": "", "rects": [[1.0, 13.0, 12.0, 1.0], [6.0, 9.0, 2.0, 4.0]] }
+  ],
+
+  "doors": [
+    { "id": "D1",  "kind": "internal", "between": ["HB1", "C1"], "initial": "closed", "bar": { "orient": "h", "x": 4.0,  "y": 3.0,  "len": 1.0 } },
+    { "id": "D2",  "kind": "internal", "between": ["HB2", "C1"], "initial": "closed", "bar": { "orient": "h", "x": 9.0,  "y": 3.0,  "len": 1.0 } },
+    { "id": "D3",  "kind": "internal", "between": ["MED", "C1"], "initial": "closed", "bar": { "orient": "h", "x": 2.0,  "y": 4.0,  "len": 1.0 } },
+    { "id": "D4",  "kind": "internal", "between": ["LQ",  "C1"], "initial": "open",   "bar": { "orient": "h", "x": 11.0, "y": 4.0,  "len": 1.0 } },
+    { "id": "D5",  "kind": "internal", "between": ["C1",  "C2"], "initial": "open",   "bar": { "orient": "h", "x": 6.5,  "y": 4.0,  "len": 1.0 } },
+    { "id": "D6",  "kind": "internal", "between": ["SEC", "C2"], "initial": "closed", "bar": { "orient": "h", "x": 2.0,  "y": 9.0,  "len": 1.0 } },
+    { "id": "D7",  "kind": "internal", "between": ["HB3", "C2"], "initial": "closed", "bar": { "orient": "h", "x": 11.0, "y": 9.0,  "len": 1.0 } },
+    { "id": "D8",  "kind": "internal", "between": ["C2",  "C3"], "initial": "open",   "bar": { "orient": "h", "x": 6.5,  "y": 9.0,  "len": 1.0 } },
+    { "id": "D9",  "kind": "internal", "between": ["ENG", "C3"], "initial": "closed", "bar": { "orient": "h", "x": 2.0,  "y": 14.0, "len": 1.0 } },
+    { "id": "D10", "kind": "internal", "between": ["HB4", "C3"], "initial": "open",   "bar": { "orient": "h", "x": 5.0,  "y": 14.0, "len": 1.0 } },
+
+    { "id": "H1", "kind": "hangar", "between": ["HB1", "SPACE"],   "initial": "closed", "outward": "up",    "bar": { "orient": "h", "x": 4.0,  "y": 1.0,  "len": 1.0 } },
+    { "id": "H2", "kind": "hangar", "between": ["HB2", "SPACE"],   "initial": "closed", "outward": "up",    "bar": { "orient": "h", "x": 9.0,  "y": 1.0,  "len": 1.0 } },
+    { "id": "H3", "kind": "hangar", "between": ["HB3", "SPACE"],   "initial": "closed", "outward": "right", "bar": { "orient": "v", "x": 13.0, "y": 9.5,  "len": 1.0 } },
+    { "id": "H4", "kind": "hangar", "between": ["HB4", "SPACE"],   "initial": "closed", "outward": "down",  "bar": { "orient": "h", "x": 5.0,  "y": 16.0, "len": 1.0 } },
+    { "id": "H5", "kind": "hangar", "between": ["HB5", "EPSILON"], "initial": "closed", "outward": "down",  "bar": { "orient": "h", "x": 8.0,  "y": 16.0, "len": 1.0 } }
+  ],
+
+  "passages": [
+    { "between": ["OBS", "LQ"],  "bar": { "orient": "h", "x": 11.0, "y": 6.0,  "len": 1.0 } },
+    { "between": ["STO", "C3"],  "bar": { "orient": "h", "x": 11.0, "y": 14.0, "len": 1.0 } },
+    { "between": ["HB5", "C3"],  "bar": { "orient": "h", "x": 8.0,  "y": 14.0, "len": 1.0 } }
+  ],
+
+  "exterior_labels": [
+    { "text": "SPACE",             "x": 7.0,  "y": 0.5,  "align": "center" },
+    { "text": "SPACE",             "x": 13.5, "y": 10.0, "align": "center", "rotate": -90 },
+    { "text": "SPACE",             "x": 5.5,  "y": 16.6, "align": "center" },
+    { "text": "EXTENSION EPSILON", "x": 8.5,  "y": 16.6, "align": "center" }
+  ],
+
+  "hangar_roles": {
+    "H1": "Passenger and medical shuttle dock",
+    "H2": "Visiting-vessel berth (inspections, damaged ships)",
+    "H3": "Security EVA airlock",
+    "H4": "Cargo hangar, adjacent to Storage via C3",
+    "H5": "Construction hangar leading to Extension Epsilon"
+  }
+}
