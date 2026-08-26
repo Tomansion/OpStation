@@ -424,4 +424,8 @@ class StationView {
   }
 }
 
+/* Three consumers, three module systems. A top-level `class` in a classic
+ * script creates a global lexical binding but NOT a window property, so the
+ * frontend's ES modules could not reach it without this. */
+if (typeof window !== 'undefined') { window.StationView = StationView; window.STATION_THEME = THEME; }
 if (typeof module !== 'undefined') module.exports = { StationView, THEME };

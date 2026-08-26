@@ -1,0 +1,35 @@
+# OpStation. Two services, because generation and play have nothing in common:
+# generation needs an LLM, Piper and half a gigabyte of voice models; play needs
+# none of it and must never reach for any of them.
+#
+#   docker compose up app                      # play
+#   docker compose run --rm generator --help   # generate a scenario
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    ports:
+      - "3000:3000"
+    volumes:
+      # The bank and the session records. Sharing this with the generator is
+      # what makes a freshly generated scenario appear on the home page.
+      - ./data:/data
+      # Editing the layout or the tunables should not need a rebuild.
+      - ./station:/app/station:ro
+      - ./config:/app/config:ro
+    restart: unless-stopped
+
+  generator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.generator
+    environment:
+      # Read from the host environment or a .env file beside this compose file.
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      OPSTATION_LLM_MODEL: ${OPSTATION_LLM_MODEL:-mistral/mistral-large-latest}
+    volumes:
+      - ./data:/data
+      - ./station:/app/station:ro
+      - ./config:/app/config:ro
+    profiles: ["tools"]

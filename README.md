@@ -2,22 +2,56 @@
 
 A door-control game used as a memory instrument.
 
-The player is the **Door Control Operator** of a space station. Their only actions are opening and closing doors, reading or hearing messages, and answering questions. The difficulty is not manual — it is remembering *why* each door is in its current state, *who* asked for it, *since when*, *what must happen before it can change*, and *whether the instruction they remember has since been withdrawn*.
+The player is the **Door Control Operator** of a space station. Their only actions are opening and closing doors, reading or hearing messages, and answering questions. The difficulty is not manual — it is remembering _why_ each door is in its current state, _who_ asked for it, _since when_, _what must happen before it can change_, and _whether the instruction they remember has since been withdrawn_.
 
 There is no message history, no log, no replay. A message arrives once and is gone.
 
 A session runs **20–30 minutes** in real time and never pauses.
 
-## Status
+## Run it
 
-Specification and station layout only. No application code yet.
+```sh
+make venv        # create .venv and install everything
+make test        # run the suite
+make serve       # play on http://localhost:3000
+```
 
-| | |
-|---|---|
-| **[`spec.md`](spec.md)** | The specification. Start here. |
-| **[`station/`](station/)** | The station layout: authoritative JSON, canvas renderer, browsable preview, printable sector handbook. |
-| **[`config/difficulty.json`](config/difficulty.json)** | Every value that shapes difficulty, in one place. |
-| **[`archive/`](archive/)** | Superseded drafts and the review rounds that produced the current spec. |
+Generating a scenario needs an LLM key in a gitignored `.env` beside this file:
+
+```sh
+echo 'MISTRAL_API_KEY=...' > .env
+make voices                              # download the six pinned Piper voices (~500 MB, once)
+make generate ARGS="--finale invasion"   # writes into data/scenarios/
+```
+
+Or in Docker:
+
+```sh
+docker compose up app
+docker compose run --rm generator --finale hull_breach
+```
+
+## What is here
+
+|                                                        |                                                                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **[`spec.md`](spec.md)**                               | The specification. Start here.                                                                 |
+| **[`backend/opstation/`](backend/opstation/)**         | Station graph, runtime engine, validator, generator, FastAPI app.                              |
+| **[`frontend/`](frontend/)**                           | Four pages of plain ES modules. No build step.                                                 |
+| **[`station/`](station/)**                             | The layout: authoritative JSON, canvas renderer, browsable preview, printable sector handbook. |
+| **[`config/difficulty.json`](config/difficulty.json)** | Every value that shapes difficulty, in one place.                                              |
+| **[`config/voices.json`](config/voices.json)**         | The pinned Piper voice per actor type. Append-only.                                            |
+| **[`archive/`](archive/)**                             | Superseded drafts and the review rounds that produced the current spec.                        |
+
+```
+backend/opstation/
+  station.py       the door graph; recomputes every isolation cut-set from it
+  engine.py        the session runtime — tasks, holds, cascade, queue, scoring
+  session.py       the asyncio clock and per-session persistence
+  validator/       the 35 rules, and the perfect-player simulation
+  generate/        five LLM stages, a deterministic scheduler, Piper TTS
+  app.py           FastAPI: REST, WebSocket, admin
+```
 
 ## Look at the station
 
@@ -66,18 +100,20 @@ owns exactly D1–D5 and every two-door area has consecutive numbers.
 The home page shows this same canvas, fully operable with no clock running, so a player can
 learn the controls and the layout before a session starts.
 
-## How it will be built
+## How it is built
 
-- **Backend** — Python 3.12 + FastAPI. Server-authoritative clock, one asyncio game loop per session, WebSocket push.
-- **Frontend** — Angular. The station drawn on a `<canvas>`.
-- **Scenarios** — generated offline by an LLM (via LiteLLM) into a validated bank, with TTS audio pre-rendered into each scenario folder. **The runtime never calls an LLM or a TTS engine.**
-- **Storage** — flat JSON files. One file per session.
-- **Packaging** — Dockerfile per service plus `docker-compose.yml`.
+- **Backend** — Python 3.12 + FastAPI. Server-authoritative clock, one asyncio loop per session, WebSocket push. The engine itself is pure and clock-injected, so a 27-minute session replays in a millisecond in a test.
+- **Frontend** — plain ES modules on an HTML `<canvas>`, no framework and no build step. A deliberate change from the Angular plan; the reasoning is in [`spec.md` §14.7](spec.md).
+- **Scenarios** — generated offline into a validated bank, with Piper audio pre-rendered into each scenario folder. **The runtime never calls an LLM or a TTS engine.**
+- **Storage** — flat JSON files, written atomically. One file per session.
+- **Packaging** — one Dockerfile for playing, one for generating. They share nothing but the bank.
 
-See [`spec.md` §14](spec.md) for the architecture, and §11–13 for the scenario format, generation pipeline and validator.
+See [`spec.md` §14](spec.md) for the architecture, §11–13 for the scenario format, generation pipeline and validator.
 
-## The two ideas worth knowing before reading the spec
+## The three ideas worth knowing before reading the spec
 
-**Tasks are the sole ground truth.** There is no priority hierarchy and no inferred intent. A task is a required set of door states, a start time, and a duration it must hold for. If no task covers a door at a given moment, no state is right or wrong. A "conflicting request" is therefore a message with *no task* — a sympathetic plea to open a door that another thread's live obligation requires stay closed.
+**Tasks are the sole ground truth.** There is no priority hierarchy and no inferred intent. A task is a required set of door states, a start time, and a duration it must hold for. If no task covers a door at a given moment, no state is right or wrong. A "conflicting request" is therefore a message with _no task_ — a sympathetic plea to open a door that another thread's live obligation requires stay closed.
 
-**Every scenario must be provably solvable.** The validator replays each generated scenario with a perfect operator; if any task fails, the scenario is rejected and sent back to the generator for repair. The same pass produces the expected-state trace the admin page renders against what the player actually did.
+**Every scenario must be provably solvable.** The validator replays each generated scenario with a perfect operator — one who makes the minimum toggles at the latest safe moment. If any task still fails, the scenario is unplayable and is rejected. The same pass produces the expected-state trace the admin page renders beside what the player actually did.
+
+**The model writes fiction; Python does the arithmetic.** Every timestamp in a scenario is computed, not written. The generator asks for beats, phases and prose across five small calls, and a scheduler assigns the times — which is what makes the reading budget, the minimum gaps, the challenge clearances and, most of all, solvability hold by construction rather than by luck. The first version that asked the model to do its own arithmetic failed 63 validator checks. See [`spec.md` §12.1.1](spec.md).

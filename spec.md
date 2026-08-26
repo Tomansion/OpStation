@@ -72,11 +72,11 @@ Phases are a property of the scenario template, expressed as fractions of `durat
 
 The station layout is **fixed forever** — identical in every scenario and every session. It is authored once, here.
 
-**6 rooms**, **3 corridors**, **5 hangar bays**, **13 internal doors (D1–D11)**, **5 hangar doors (H1–H5)**. Every hangar bay has two doors: an internal one onto the station and an outer one to space.
+**6 rooms**, **3 corridors**, **5 hangar bays**, **13 internal doors (D1–D13)**, **5 hangar doors (H1–H5)**. Every hangar bay has two doors: an internal one onto the station and an outer one to space.
 
 ### 3.1 Authoritative definition
 
-The layout lives in **[`station/station.json`](station/station.json)** (v2) — the single source of truth for areas, door positions, initial door states, hangar roles and the isolation vocabulary of §3.5. The tables below are generated from it; if they disagree, the JSON wins.
+The layout lives in **[`station/station.json`](station/station.json)** (v4) — the single source of truth for areas, door positions, initial door states, hangar roles and the isolation vocabulary of §3.5. The tables below are generated from it; if they disagree, the JSON wins.
 
 To look at it: open **[`station/preview.html`](station/preview.html)** in a browser. It is self-contained (no server needed) and lets you click doors to toggle them. After editing `station.json`, regenerate it:
 
@@ -84,7 +84,7 @@ To look at it: open **[`station/preview.html`](station/preview.html)** in a brow
 python3 station/build_preview.py
 ```
 
-[`station/render.js`](station/render.js) is the canvas renderer used by both the preview and the Angular game component. It draws areas, doors and labels, and hit-tests door clicks with an 8 px inflated hit-box so doors stay clickable at small scales.
+[`station/render.js`](station/render.js) is the canvas renderer used by the preview, the printed sector handbook and the game itself. It draws areas, doors and labels, and hit-tests door clicks with an 8 px inflated hit-box so doors stay clickable at small scales.
 
 Orientation listing, generated from `station.json`. `Dn` is an operable door; `..open..` is a permanent doorless passage:
 
@@ -446,11 +446,11 @@ The task's `require` map stays fully explicit — the ground truth is never infe
 }
 ```
 
-The validator (V26) recomputes the cut-set from the door graph and rejects the task if `require` does not match exactly. That makes the map load-bearing: change a door in `station.json` and every derived task is re-checked automatically.
+The validator (V23) recomputes the cut-set from the door graph and rejects the task if `require` does not match exactly. That makes the map load-bearing: change a door in `station.json` and every derived task is re-checked automatically.
 
-The example above is a live demonstration. **D9 is in that `require` map only because Hangar Bay 3 bridges C2 and C3.** Omit it and the sector is not actually sealed; remove the bypass from the map and V26 rejects the task for carrying a door that is no longer on the boundary.
+The example above is a live demonstration. **D9 is in that `require` map only because Hangar Bay 3 bridges C2 and C3.** Omit it and the sector is not actually sealed; remove the bypass from the map and V23 rejects the task for carrying a door that is no longer on the boundary.
 
-`require` lists the **cut only** — never the volume's interior doors. D10–D13 sit inside the service sector and stay open; requiring them closed would be a different, larger obligation, and V26 rejects it.
+`require` lists the **cut only** — never the volume's interior doors. D10–D13 sit inside the service sector and stay open; requiring them closed would be a different, larger obligation, and V23 rejects it.
 
 Difficulty comes free with this. Three levels, all expressible with the same field:
 
@@ -568,6 +568,7 @@ Everything that shapes pressure lives in **`config/difficulty.json`**, loaded at
 | Key | Default | Effect |
 |---|---|---|
 | `tts_engine` | `piper` | Which TTS backend the generator uses |
+| `tts_sentence_gap_seconds` | 1.0 | Silence between sentences of a spoken message. Changing it changes every `audio_duration`, so the bank must be re-rendered and re-validated |
 | `tick_ms` | 250 | Task-evaluation resolution |
 | `failure_notice_cooldown_seconds` | 30 | Min gap between failure notices from one task group |
 | `penalty_per_failed_task` | 1 | |
@@ -771,11 +772,12 @@ data/scenarios/<scenario_id>/
 Notes:
 
 - `"I don't know"` is a constant supplied by the UI, never present in the JSON.
-- `message.kind` ∈ `instruction | update | supersede | retraction | status | tempting_request | resolution | reopen | chatter`.
+- `message.kind` ∈ `instruction | update | supersede | retraction | status | tempting_request | resolution | reopen | chatter`. The set is closed and V1 enforces it: `kind` is what the admin page reads to tell a release from a withdrawal, and what V17 reads to find a tempting request. Generation maps the synonyms a model reaches for — `confirmation`, `alert`, `correction` — onto the enum rather than widening it.
 - `cancels` and `retraction_style` appear only on `kind: "retraction"` messages (§6.7).
 - Door states at session start come from `station/station.json`, never from the scenario.
 - `at` is always **seconds from session start**, integer.
 - Every message with a `task_group_id` is the message that *creates or updates* that obligation.
+- A challenge carries **`depends_on`**: the message ids its correct answer rests on. Added during implementation, because two rules are otherwise unverifiable — V19 has to check that everything the answer depends on was delivered *before* the question, and V29 has to recognise a retraction whose teeth are a challenge rather than a later task. Without it both rules can only be guessed at.
 
 ### 11.2 Actors
 
@@ -826,8 +828,40 @@ Scenarios are **generated offline into a bank** and played deterministically at 
 2. **LLM fill** — the LLM receives the station map, the actor roster, the task/`hold` semantics, the template, and the timing rules. It produces `scenario.json`: actor names, thread instantiations, message prose, timings, tasks, `fail_message` texts, challenges with distractors and explanations.
 3. **Validation** — the validator (§13) runs. On failure the report is fed back to the LLM for up to **5** repair attempts (`generator_repair_attempts`), each attempt receiving the full validator report so it can fix every rule at once. A scenario that still fails is stored as `invalid` and never offered for play.
 4. **TTS rendering** — every `radio` message and every `radio` challenge prompt is rendered to WAV in the sender's pinned voice ([`config/voices.json`](config/voices.json)), written to `audio/`, and its real `audio_duration` written back into the JSON. `system` output passes through the `pa_intercom` filter before being written.
+
+   **A pause of `tts_sentence_gap_seconds` (default 1 s) is inserted between sentences.** Piper yields one audio chunk per sentence, so the gap uses its own segmentation rather than a guess at where sentences end. This is not cosmetic. A radio message has no transcript and is heard exactly once, so two instructions running into each other are not merely harder to follow — they are unintelligible, and the pause is what lets a listener separate *"H5 stays closed"* from *"until I clear it"*. It also gives the important clause somewhere to land.
+
+   The gap lengthens every file, so the pre-TTS estimate of `read_cost` has to include it (§5.3): a radio message is costed as its text cost × 1.35 plus one gap per sentence break. An estimate that is too low passes validation and then fails step 5, after the audio has been rendered.
 5. **Re-validation** — timing rules are re-checked with the real audio durations, since `read_cost` depends on them. This pass may not call the LLM; if it fails, the scenario is marked `invalid`.
+
+   Before re-checking, a **reflow** settles the difference the estimate could not know. The pre-TTS cost of a spoken message is a prediction; when a file comes back a second longer than predicted, its own obligation now starts too early (V7). The reflow pushes that obligation later by exactly the shortfall. Padding every estimate to cover the worst case would cost real gameplay time on every message in the bank; correcting the handful that actually drift costs nothing.
 6. **Publish** — the scenario appears in the bank and is selectable on the home page.
+
+### 12.1.1 The model writes fiction; Python does the arithmetic
+
+The single "LLM fill" of step 2 is, in the build, five smaller calls and a scheduler. This is the most consequential implementation decision in the generator and it exists because the first working version failed 63 validator rules, almost all of them arithmetic.
+
+**Five stages instead of one call.** A 60-message scenario in one response is where models start dropping fields, and each stage needs different context:
+
+| Stage | Produces | Why separate |
+|---|---|---|
+| 1 Plan | scenario name, six actor names, threads with grades, premises and door claims | Cheap, and everything downstream needs it |
+| 2 Threads | the beats of one thread | Written in parallel, one call each. Each is told which doors the other threads claimed |
+| 3 Everyday | the short one-off exchanges | Needs no thread detail, only what not to contradict |
+| 4 Temptations | the conflicting requests | Cannot be written until every obligation exists, since it must pull against one from a *different* thread |
+| 5 Challenges | six questions | Needs the finished timeline with real timestamps, because the answer must be derivable from what arrived *before* the question |
+
+**No stage ever writes a timestamp.** Beats declare a phase and an order; the scheduler assigns every `at`. That is what makes the timing rules hold rather than be hoped for: V7's reading slack, V8's rolling density, V9's minimum gap, V10's window fit, V11's clearance around deadlines and V12's challenge spacing are all arithmetic, and arithmetic is not what a language model is for.
+
+The scheduler also **guarantees solvability**. Threads are written in parallel and cannot know which doors the others took, so two threads demanding opposite states on one door at one moment is expected, not exceptional. Rather than reject the scenario, the scheduler settles each collision in a fixed order of preference: truncate the earlier obligation (the later instruction supersedes it, which is what the fiction implies anyway), else push the later one clear, else drop whichever carries less content. V13 and V14 are therefore structural rather than aspirational.
+
+Three more things are structural for the same reason:
+
+- **The end-of-shift seal** (V21) is appended and pinned so its window closes last. Asking for it politely produced a scenario that ended with a hangar door open to space.
+- **A hold is capped** at 30 % of the session. Models write 60-minute holds into 27-minute shifts.
+- **Retraction shape** is normalised: a `resolution` carrying `cancels` is relabelled a retraction, a missing `retraction_style` is inferred, an unresolvable withdrawal has the door named in it, and anything over the quota is demoted. Every one of those is a labelling question with one right answer, so none of them is worth a call.
+
+**What is left for the model to fix.** After the deterministic pass, the repair loop sends back only prose: an invented place, a withdrawal that cannot be resolved, a distractor drawn from nowhere. One item at a time, with the validator's own words attached. That is a far smaller and more reliable request than "here are 60 errors, try again".
 
 ### 12.2 Generation is triggered manually
 
@@ -854,7 +888,7 @@ A **Generate scenario** button on the admin page starts a generation job with a 
 
 ## 13. Scenario validator
 
-Every scenario must pass all rules before it can be played. The report is written to `validation.json` and shown on the admin page.
+Every scenario must pass all 35 rules before it can be played. The report is written to `validation.json` and shown on the admin page.
 
 ### 13.1 Structural
 
@@ -863,7 +897,7 @@ Every scenario must pass all rules before it can be played. The report is writte
 | V1 | All ids unique; every `thread_id`, `actor_id`, `group_id`, `message_id` reference resolves. |
 | V2 | Every `at` is an integer in `[0, duration_seconds]`. Messages sorted ascending by `at`. |
 | V3 | Every task has a `group_id` and a `message_id`; the group's thread matches the message's thread; `message.at < task.at`. |
-| V4 | Every door named in `require` ∈ {D1…D12, H1…H5}; every state ∈ {open, closed}. |
+| V4 | Every door named in `require` ∈ {D1…D13, H1…H5}; every state ∈ {open, closed}. |
 | V5 | Every `radio` message has an existing audio file, and `audio_duration` matches the file within ±0.3 s. |
 | V6 | Exactly 6 actors, one per type; each type used at most once. |
 
@@ -920,6 +954,20 @@ Every scenario must pass all rules before it can be played. The report is writte
 | V33 | The scenario's `station_version` matches `station.json`'s `version`. |
 | V34 | The scenario records the `config/difficulty.json` values it was validated against; the admin page flags a mismatch with the running config. |
 
+### 13.7 Plain English
+
+| # | Rule |
+|---|---|
+| V35 | **No idioms, no slang, no jokes, and no sentence long enough that holding it is the hard part.** Errors on a curated list of figures of speech and slang, and on any sentence over 30 words. Warns on spoken sentences over 20 words. |
+
+Most players will not be native English speakers, and a `radio` message is heard exactly once with no transcript and no replay. That makes reading difficulty a **confound, not a style preference**: a player who fails because they could not decode *"buy me some time"* in one hearing has been measured on their English, not on their memory — which is the one thing the instrument exists to measure.
+
+The rule is enforced rather than merely requested because models drift toward colour. The first passing scenario contained *"vent starts in two mikes"* — military slang for minutes, invisible to a native speaker and opaque to everyone else. V35 is in the set of rules the repair loop sends back for rewriting, so the fix costs one call.
+
+Standard radio procedure words are **not** slang and are deliberately not on the list. *"Copy"*, *"stand by"*, *"say again"* are consistent, learnable and part of what makes the fiction work. What is banned is figurative language, invented jargon, and humour.
+
+Speech rendering serves the same goal from the other side (§12.1 step 4): a pause between sentences, and door names spoken separately and slower, because the door name is at once the most important word in the instruction and the shortest.
+
 ---
 
 ## 14. Application architecture
@@ -929,35 +977,77 @@ Every scenario must pass all rules before it can be played. The report is writte
 - **Backend:** Python 3.12 + FastAPI. WebSockets for the live session. Server-authoritative clock and game loop.
 - **LLM:** LiteLLM, provider-agnostic, generation-time only.
 - **TTS:** **Piper**, local and offline, inside the generation image. Six pinned voice models, one per actor type — see [`config/voices.json`](config/voices.json) and §11.2. Rendered at generation time into the scenario folder, with the `system` voice passed through an intercom filter. Wrapped behind a small `TextToSpeech` interface so a cloud provider can be swapped in later without touching the pipeline.
-- **Frontend:** Angular. Station rendered on an HTML `<canvas>` with hit-testing for door clicks.
+- **Frontend:** plain ES modules, no framework and no build step. Station rendered on an HTML `<canvas>` with hit-testing for door clicks, by the same [`station/render.js`](station/render.js) the dev preview and the printed handbook use. **This is a deliberate change from the Angular plan** — see §14.7.
 - **Storage:** flat files, no database server.
 - **Packaging:** Dockerfile per service plus a `docker-compose.yml`; README with local and Docker instructions.
 
 ### 14.2 Storage layout
 
 ```
+.env                    gitignored: the LLM key. Generation-time only.
+Makefile                venv, test, serve, generate, station, sheets, voices
+docker-compose.yml      two services: `app` plays, `generator` generates
+docker/
+  Dockerfile.app        thin: no model weights, no LLM client, no ffmpeg
+  Dockerfile.generator  LiteLLM, Piper, ffmpeg, the six pinned voices
 config/
-  difficulty.json       # every value that shapes pressure
-  voices.json           # pinned Piper voice per actor type — append-only
+  difficulty.json       every value that shapes pressure
+  voices.json           pinned Piper voice per actor type — append-only
 assets/
-  portraits/*.png       # 512x512, one per actor type
+  portraits/*.png       512x512, one per actor type
   make_placeholder_portraits.py
+  download_voices.py    fetches the six pinned voice models
+  voices/*.onnx         gitignored: ~500 MB of Piper models
 station/
-  station.json          # authoritative layout, read by backend and frontend
-  render.js             # canvas renderer, shared by preview and game
+  station.json          authoritative layout, read by backend and frontend
+  render.js             canvas renderer, shared by preview, handbook and game
   preview.template.html
-  preview.html          # generated by build_preview.py
+  preview.html          generated by build_preview.py
   build_preview.py
-  format_station.py     # keeps station.json compact and hand-editable
+  format_station.py     keeps station.json compact and hand-editable
   build_sector_sheets.py
-  sector-sheets.html    # generated: printable sector handbook
-  sectors/*.png         # generated with --png: one image per sector
-data/
+  sector-sheets.html    generated: printable sector handbook
+  sectors/*.png         generated with --png: one image per sector
+backend/
+  requirements.txt      runtime only — no LiteLLM, no Piper
+  requirements-generate.txt
+  opstation/
+    paths.py            one place that knows the layout; OPSTATION_DATA_DIR
+    station.py          the door graph and every isolation cut-set
+    config.py           difficulty tunables and pinned voices
+    models.py           the scenario schema
+    engine.py           the session runtime — pure, clock-injected
+    session.py          asyncio clock, WebSocket fan-out, persistence
+    bank.py             the scenario bank and what makes an entry playable
+    app.py              FastAPI: REST, WebSocket, admin
+    validator/
+      __init__.py       runs all 35 rules, builds the report
+      rules.py          one function per rule, v01 .. v35
+      simulate.py       the perfect-player simulation
+      findings.py       the report, including the form the LLM repairs from
+    generate/
+      brief.py          the station and rules brief, generated from the JSON
+      prompt.py         the five stage prompts and the repair prompt
+      plan.py           the intermediate form between the LLM and a scenario
+      schedule.py       every timestamp, and the solvability guarantee
+      assemble.py       plan + schedule -> scenario.json
+      repair.py         deterministic fixes
+      pipeline.py       the whole run, including the repair loop
+      tts.py            Piper, the intercom filter, and the TextToSpeech seam
+  tests/                station, engine, validator, scheduler, API
+frontend/
+  index.html            the shell; loads render.js as a classic script
+  style.css
+  app.js                router, and the audio priming that Start shift performs
+  lib/{api,station,modal}.js
+  pages/{home,game,summary,admin}.js
+data/                   OPSTATION_DATA_DIR; gitignored
   scenarios/
     index.json
     <scenario_id>/
       scenario.json
       validation.json
+      generation.log
       audio/*.wav
   sessions/
     index.json
@@ -980,9 +1070,13 @@ One JSON per session, written atomically (temp file + rename). Persisted on ever
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/scenarios` | Bank listing: id, name, duration, thread count, validity |
+| GET | `/api/station` | The layout, served from the same `station.json` the backend loads |
+| GET | `/api/config` | The tunables the client's own behaviour depends on, plus the UI-supplied "I don't know" option |
+| GET | `/api/scenarios` | Bank listing: id, name, duration, thread count, validity, whether its audio exists |
+| GET | `/api/scenarios/{id}/audio/{file}` | A pre-rendered radio message |
 | POST | `/api/sessions` | `{participant_name, scenario_id}` → `{session_id}` |
 | GET | `/api/sessions/{id}` | State snapshot |
+| GET | `/api/sessions/{id}/summary` | The debrief breakdown of §9.2 |
 | WS | `/ws/sessions/{id}` | Live session |
 | GET | `/api/admin/status` | App health, bank inventory, validator summary, active sessions |
 | GET | `/api/admin/sessions` | Session history |
@@ -994,7 +1088,9 @@ One JSON per session, written atomically (temp file + rename). Persisted on ever
 
 No authentication anywhere.
 
-**WebSocket — server → client:** `snapshot`, `tick` (clock, score, pending count), `notification_available`, `message` (on open), `challenge`, `failure_notice`, `door_state`, `session_end`.
+**WebSocket — server → client:** `snapshot` on connect, then `state` on every change — clock, score, door states, pending count, and the front of the queue. Plus `opened`, `answered` and `shake` in reply to a client action.
+
+The `state` payload is deliberately one shape rather than a family of typed events. The player is not told who is calling or how urgent it is before opening a notification (§5.2), so a queued item must reveal nothing but its existence — and the simplest way to guarantee that is for one function to decide what is publishable and for the socket to carry only its output. A `message` event carrying a sender would be a leak waiting to happen.
 
 **WebSocket — client → server:** `toggle_door {door}`, `open_notification`, `acknowledge {id}`, `answer_challenge {challenge_id, option_id}`.
 
@@ -1032,6 +1128,18 @@ Rules for it:
 - It doubles as a **liveness check**: if the canvas renders and doors respond, the station component and the WebSocket are working before a participant is committed to a session.
 
 Pressing **Start shift** also primes the audio context (§5.1), so the home page is the natural place for the audio check too — it is the last moment at which a failure is free.
+
+### 14.7 Why the frontend has no framework
+
+The plan said Angular. The build is plain ES modules instead, and the reasoning is worth recording because it is a reversible decision that someone will want to revisit.
+
+Three things pushed it:
+
+- **The renderer was already framework-free.** [`station/render.js`](station/render.js) is the load-bearing part of the UI, and it is shared with the dev preview and the printed sector handbook (§3.6). Under Angular it would have been wrapped in a component that adds nothing; the wrapper would be the only Angular-shaped thing about it.
+- **The app is four pages and one socket.** Home, game, summary, admin. There is no form validation, no client-side state machine, no data layer worth the name — the server is authoritative about time, delivery, failure and score, and the client renders what it is told.
+- **A research instrument has to be runnable.** `make serve` starts it. Adding a Node toolchain, a package lock and a build step between a researcher and a session is a real cost against no benefit at this size.
+
+What this costs: no component tests, no typed templates, and if the UI grows a genuine client-side model — an operator's notepad, a live thread view, anything with state of its own — this decision should be revisited rather than worked around. The API and the WebSocket protocol are unchanged either way, so a rewrite of the frontend is a rewrite of the frontend and nothing else.
 
 ---
 
@@ -1074,9 +1182,9 @@ Recorded so they are not re-litigated:
 
 Nothing is blocking. Two things to look at, and one flagged risk.
 
-**Q-A — Station map v3.** [`station/preview.html`](station/preview.html) — open it and click through the **isolation targets** list at the bottom of the panel; each row applies that target's cut-set to the map, which is the fastest way to sanity-check all 16. What changed this round: every hangar bay now has an internal door as well as an outer one (D13 added for Hangar Bay 5), Hangar Bay 3 links C2 and C3 (D9), Engineering shares a wall with Hangar Bay 4 (D11), and Security overhangs the corridor line to the left.
+**Q-A — Station map v4.** [`station/preview.html`](station/preview.html) — open it and click through the **isolation targets** list at the bottom of the panel; each row applies that target's cut-set to the map, which is the fastest way to sanity-check all 17. What changed this round: every hangar bay now has an internal door as well as an outer one (D13 added for Hangar Bay 5), Hangar Bay 3 links C2 and C3 (D9), Engineering shares a wall with Hangar Bay 4 (D11), and Security overhangs the corridor line to the left.
 
-The new doors were appended as D13–D11 rather than renumbered spatially, so the spec's worked examples stay valid. If you would rather they read north-to-south, say so now — cheap today, expensive once a scenario bank exists.
+Doors were renumbered spatially in v4: top to bottom in horizontal bands, then left to right within a band (§3.1).
 
 **Q-B — Portrait placeholders.** Six exist at `assets/portraits/*.png`, 512×512: silhouettes with a role-tinted background and an accent collar, `system` drawn as a speaker grille rather than a person. Good enough to build against — worth confirming the framing and size before real artwork.
 

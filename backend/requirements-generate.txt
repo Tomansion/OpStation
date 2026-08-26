@@ -1,0 +1,4 @@
+# Generation-time extras, on top of requirements.txt.
+-r requirements.txt
+litellm>=1.55
+piper-tts>=1.2

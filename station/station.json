@@ -8,6 +8,7 @@
       "id": "HB1",
       "kind": "hangar_bay",
       "name": "HANGAR BAY 1",
+      "prose": "Hangar Bay 1",
       "sub": "shuttle dock",
       "rects": [[2.4, 1.0, 3.0, 2.2]]
     },
@@ -15,6 +16,7 @@
       "id": "HB2",
       "kind": "hangar_bay",
       "name": "HANGAR BAY 2",
+      "prose": "Hangar Bay 2",
       "sub": "visiting berth",
       "rects": [[7.2, 1.5, 4.0, 1.7]]
     },
@@ -22,6 +24,7 @@
       "id": "HB3",
       "kind": "hangar_bay",
       "name": "HANGAR BAY 3",
+      "prose": "Hangar Bay 3",
       "sub": "security EVA",
       "rects": [[9.4, 9.6, 3.6, 2.3]]
     },
@@ -29,6 +32,7 @@
       "id": "HB4",
       "kind": "hangar_bay",
       "name": "HANGAR BAY 4",
+      "prose": "Hangar Bay 4",
       "sub": "cargo",
       "rects": [[4.7, 12.9, 2.6, 2.1]]
     },
@@ -36,6 +40,7 @@
       "id": "HB5",
       "kind": "hangar_bay",
       "name": "HANGAR BAY 5",
+      "prose": "Hangar Bay 5",
       "sub": "construction",
       "rects": [[7.9, 12.9, 3.0, 2.1]]
     },
@@ -43,6 +48,7 @@
       "id": "MED",
       "kind": "room",
       "name": "MEDICAL BAY",
+      "prose": "the Medical Bay",
       "sub": "",
       "rects": [[1.5, 4.3, 4.2, 2.3]]
     },
@@ -50,6 +56,7 @@
       "id": "LQ",
       "kind": "room",
       "name": "LIVING",
+      "prose": "the Living Quarters",
       "sub": "QUARTERS",
       "rects": [[9.0, 4.3, 4.0, 2.3]]
     },
@@ -57,6 +64,7 @@
       "id": "OBS",
       "kind": "room",
       "name": "OBSERVATION",
+      "prose": "the Observation Deck",
       "sub": "DECK",
       "rects": [[9.0, 6.6, 4.0, 2.0]]
     },
@@ -64,6 +72,7 @@
       "id": "SEC",
       "kind": "room",
       "name": "SECURITY",
+      "prose": "Security",
       "sub": "",
       "rects": [[0.4, 9.6, 4.6, 2.3]]
     },
@@ -71,6 +80,7 @@
       "id": "ENG",
       "kind": "room",
       "name": "ENGINEERING",
+      "prose": "Engineering",
       "sub": "/ REACTOR",
       "rects": [[1.5, 12.9, 3.2, 2.1]]
     },
@@ -78,6 +88,7 @@
       "id": "STO",
       "kind": "room",
       "name": "STORAGE",
+      "prose": "Storage",
       "sub": "",
       "rects": [[11.3, 12.9, 1.7, 2.1]]
     },
@@ -85,6 +96,7 @@
       "id": "C1",
       "kind": "corridor",
       "name": "C1  NORTH CORRIDOR",
+      "prose": "the north corridor",
       "sub": "",
       "rects": [[1.5, 3.2, 11.5, 1.1]]
     },
@@ -92,6 +104,7 @@
       "id": "C2",
       "kind": "corridor",
       "name": "C2  CENTRAL JUNCTION",
+      "prose": "the central junction",
       "sub": "",
       "rects": [[1.5, 8.6, 11.5, 1.0], [6.3, 4.3, 1.0, 4.3]]
     },
@@ -99,6 +112,7 @@
       "id": "C3",
       "kind": "corridor",
       "name": "C3  SERVICE CORRIDOR",
+      "prose": "the service corridor",
       "sub": "",
       "rects": [[1.5, 11.9, 11.5, 1.0], [7.6, 9.6, 1.0, 2.3]]
     }
@@ -481,5 +495,6 @@
     "room": "A single room. One boundary, obvious on sight.",
     "bay": "A single hangar bay. Obvious on sight.",
     "corridor": "A single corridor. Obvious on sight, though the cut is wide."
-  }
+  },
+  "area_prose_note": "`name` and `sub` are the two label lines the canvas draws. `prose` is how an actor says the place out loud, and it is what the validator matches message text against. Where an area is also an isolation target, the two phrases agree."
 }

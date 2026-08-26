@@ -1,6 +1,9 @@
 {
   "_comment": "Everything that shapes pressure. Loaded at startup, shown on the admin page, and read by the scenario generator so a scenario is generated against the tunables it will be played with. Changing any key marked (validator) invalidates existing scenarios.",
   "tick_ms": 250,
+  "tts_sentence_gap_seconds": 1.0,
+  "tts_door_pause_seconds": 0.25,
+  "tts_door_length_scale": 1.3,
   "failure_notice_cooldown_seconds": 30,
   "penalty_per_failed_task": 1,
   "penalty_per_wrong_answer": 1,
@@ -45,7 +48,9 @@
     "challenge_task_clearance_seconds",
     "volumes"
   ],
-  "_radio_transcript_fallback_note": "false \u2014 audio failure voids the session; there is never a transcript fallback",
+  "_radio_transcript_fallback_note": "false — audio failure voids the session; there is never a transcript fallback",
   "tts_engine": "piper",
-  "_challenge_blocks_doors_note": "false \u2014 the challenge modal never locks the station canvas; time is never frozen and doors stay operable"
+  "_challenge_blocks_doors_note": "false — the challenge modal never locks the station canvas; time is never frozen and doors stay operable",
+  "_tts_sentence_gap_note": "Silence inserted between sentences of a spoken message. Radio messages carry no transcript, so a wall of run-together speech is unintelligible rather than merely hard: the pause is what lets a listener separate one instruction from the next. Changing it changes every audio_duration, so the bank must be re-rendered and re-validated.",
+  "_tts_door_emphasis_note": "A door name is the single most important word in a spoken instruction and the shortest, so it is rendered slower than the surrounding speech and given a short pause either side. Set tts_door_pause_seconds to 0 and tts_door_length_scale to 1.0 to turn the emphasis off. Changing either changes every audio_duration, so the bank must be re-rendered and re-validated."
 }
