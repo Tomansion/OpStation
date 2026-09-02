@@ -24,6 +24,7 @@ COPY assets/ assets/
 RUN python assets/download_voices.py
 
 ENV OPSTATION_DATA_DIR=/data
+ENV PYTHONPATH=/app/backend
 VOLUME ["/data"]
 
 # MISTRAL_API_KEY (or whichever provider key LiteLLM needs) is passed in at run
