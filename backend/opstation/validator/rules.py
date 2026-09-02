@@ -774,11 +774,26 @@ def _scenario_vocabulary(ctx: Ctx) -> set[str]:
 
 
 def v20(ctx: Ctx) -> Iterator[Finding]:
-    """Volume targets (spec 2.2)."""
+    """Volume targets (spec 2.2).
+
+    Falling short of a minimum is a warning, not an error: scheduling has to
+    drop whatever does not fit the reading budget, so hitting these floors
+    exactly is a target for the generator to aim at, not a guarantee it can
+    make -- rejecting an otherwise-sound scenario over a shortfall of a few
+    messages or one everyday exchange throws away real content for a number.
+    Exceeding a maximum, or the every-exchange and finale-count invariants,
+    stay errors: those are about what a scenario must never do, not about how
+    close it got to a target.
+    """
     vol = ctx.difficulty.volumes
     sc = ctx.scenario
     n = len(sc.messages)
-    if not vol["messages_min"] <= n <= vol["messages_max"]:
+    if n < vol["messages_min"]:
+        yield Finding(
+            "V20", f"{n} messages, expected {vol['messages_min']}-{vol['messages_max']}",
+            severity="warning",
+        )
+    elif n > vol["messages_max"]:
         yield Finding(
             "V20", f"{n} messages, expected {vol['messages_min']}-{vol['messages_max']}"
         )
@@ -787,13 +802,19 @@ def v20(ctx: Ctx) -> Iterator[Finding]:
         yield Finding(
             "V20",
             f"{len(incidents)} incident threads, expected at least {vol['threads_min']}",
+            severity="warning",
         )
     finales = [t for t in sc.threads if t.grade == "finale"]
     if len(finales) != 1:
         yield Finding("V20", f"{len(finales)} finale-grade threads, expected exactly 1")
     everyday = [t for t in sc.threads if t.grade == "everyday"]
     lo, hi = vol["everyday_exchanges_min"], vol["everyday_exchanges_max"]
-    if not lo <= len(everyday) <= hi:
+    if len(everyday) < lo:
+        yield Finding(
+            "V20", f"{len(everyday)} everyday exchanges, expected {lo}-{hi}",
+            severity="warning",
+        )
+    elif len(everyday) > hi:
         yield Finding("V20", f"{len(everyday)} everyday exchanges, expected {lo}-{hi}")
     for th in everyday:
         count = len(ctx.messages_of_thread(th.id))

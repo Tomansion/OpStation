@@ -15,6 +15,22 @@ from ..models import Scenario
 from ..station import Station
 from ..validator import Report
 
+#: Rules `repair()` below has a deterministic handler for. Used only for the
+#: generator's end-of-run diagnostic (pipeline.py's `generate`), so a run that
+#: fails on a rule outside this set can say plainly that no automatic fix was
+#: even attempted, rather than leaving that to be inferred from a silent
+#: identical re-validation. NOT a promise the handler always succeeds:
+#: V30 here only trims an OVER-quota surplus (a shortfall is now a warning,
+#: not an error -- see V20's docstring, which the same reasoning applies to),
+#: V29 only demotes a toothless retraction when that would not itself breach
+#: the minimum, and V31 only pushes a re-imposing task later when there is
+#: still room before the session ends. V21 (unsealed ending) has no handler
+#: at all -- a scenario that fails it can only be fixed by the LLM stages
+#: that ran before this one, which the repair loop never goes back to.
+HANDLED_RULES = frozenset(
+    {"V2", "V6", "V9", "V15", "V16", "V17", "V19", "V23", "V26", "V29", "V30", "V31"}
+)
+
 
 def repair(scenario: Scenario, report: Report, station: Station) -> list[str]:
     """Mutate `scenario` in place. Returns a log of what was changed."""
@@ -33,6 +49,7 @@ def repair(scenario: Scenario, report: Report, station: Station) -> list[str]:
     log += _demote_toothless_retractions(scenario, by_rule.get("V29", []))
     log += _trim_excess_retractions(scenario, by_rule.get("V30", []))
     log += _fix_message_spacing(scenario, by_rule.get("V9", []))
+    log += _fix_reimposition(scenario, by_rule.get("V31", []))
     log += _renumber(scenario)
     return log
 
@@ -154,6 +171,52 @@ def _fix_message_spacing(scenario: Scenario, findings) -> list[str]:
         later.at = new_at
         for task in by_message.get(later.id, []):
             task.at += shortfall
+    return log
+
+
+def _fix_reimposition(scenario: Scenario, findings) -> list[str]:
+    """V31: the same actor may not re-create a withdrawn requirement within
+    90s of withdrawing it.
+
+    The instruction is not wrong, only early, so this mirrors `_fix_message_
+    spacing` above rather than `_drop_*`: push the task's start past every
+    retraction from its own actor that landed inside the 90s window (V31's
+    own trigger condition, recomputed rather than parsed out of the finding
+    text), taking the door state past the point it can be read as an
+    immediate reversal. Only when there is no room left before the session
+    ends is the finding left standing.
+    """
+    ids = {f.where for f in findings if f.where}
+    if not ids:
+        return []
+    tail = 5
+    log: list[str] = []
+    for task_id in sorted(ids):
+        task = scenario.tasks_by_id.get(task_id)
+        if task is None:
+            continue
+        msg = scenario.messages_by_id.get(task.message_id)
+        if msg is None:
+            continue
+        # The same (actor, timing) condition V31 itself checks -- whichever
+        # retraction(s) actually triggered the finding are guaranteed to be in
+        # here, since that is how the finding was raised in the first place.
+        blocking = [
+            r for r in scenario.retractions()
+            if r.actor_id == msg.actor_id and r.at < task.at <= r.at + 90
+        ]
+        if not blocking:
+            continue
+        culprits = sorted(r.id for r in blocking)
+        new_at = max(r.at for r in blocking) + 91
+        if new_at + task.hold > scenario.duration_seconds - tail:
+            log.append(
+                f"V31: {task.id} re-imposes within 90s of {culprits} and there is no "
+                "room to push it later before the session ends"
+            )
+            continue
+        log.append(f"V31: {task.id} moved {task.at}s -> {new_at}s, clear of {culprits}")
+        task.at = new_at
     return log
 
 

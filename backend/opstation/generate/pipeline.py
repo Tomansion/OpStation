@@ -27,7 +27,7 @@ from . import prompt as prompts
 from .assemble import assemble
 from .llm import LLM
 from .plan import BeatSpec, ChallengeSpec, GroupSpec, Plan, TaskSpec, ThreadSpec
-from .repair import repair
+from .repair import HANDLED_RULES, repair
 from .schedule import Scheduler
 
 Progress = Callable[[str, str], None]
@@ -119,6 +119,15 @@ class Generator:
                 )
             )
         self._say("plan", f"{plan.name}: {', '.join(t.key for t in plan.threads)}")
+        self._say(
+            "plan",
+            "catalogue/phase: "
+            + ", ".join(
+                f"{t.key}={t.get('catalogue_key')}@phase{t.get('opens_in_phase', '?')}"
+                for t in incidents
+            ),
+        )
+        self._say("plan", f"cast: {', '.join(f'{k}={v}' for k, v in plan.actor_names.items())}")
         return plan
 
     def write_threads(self, plan: Plan, duration: int) -> None:
@@ -155,7 +164,21 @@ class Generator:
         with ThreadPoolExecutor(max_workers=4) as pool:
             for thread, raw in pool.map(one, plan.threads):
                 self._absorb_beats(plan, thread, raw)
-                self._say("threads", f"{thread.key}: {len(thread.beats)} beats")
+                doors = sorted({d for b in thread.beats for d in _doors_in(b.text)})
+                est_read = sum(self.difficulty.read_cost(b.text) for b in thread.beats)
+                self._say(
+                    "threads",
+                    f"{thread.key}: {len(thread.beats)} beats, {len(thread.groups)} "
+                    f"obligation(s), ~{est_read:.0f}s of reading, doors touched {doors or '(none named)'}",
+                )
+
+        total_beats = sum(len(t.beats) for t in plan.threads)
+        total_read = sum(self.difficulty.read_cost(b.text) for b in plan.beats)
+        self._say(
+            "threads",
+            f"{total_beats} incident beats written, ~{total_read:.0f}s of reading "
+            f"requested so far (against a {duration}s session)",
+        )
 
         # Exactly one thread carries the dormancy the game is built to measure.
         dormant = [t for t in plan.threads if t.dormant_after]
@@ -379,7 +402,13 @@ class Generator:
                 thread.beats.append(beat)
             if thread.beats:
                 plan.threads.append(thread)
-        self._say("everyday", f"{sum(1 for t in plan.threads if t.grade == 'everyday')} exchanges")
+        total_msgs = sum(1 for b in plan.beats if b.text)
+        total_read = sum(self.difficulty.read_cost(b.text) for b in plan.beats)
+        self._say(
+            "everyday",
+            f"{sum(1 for t in plan.threads if t.grade == 'everyday')} exchanges — "
+            f"{total_msgs} messages and ~{total_read:.0f}s of reading requested so far",
+        )
 
     def write_temptations(self, plan: Plan, duration: int, count: int) -> None:
         """Needs a provisional schedule first: a request is only tempting if a
@@ -434,6 +463,7 @@ class Generator:
             )
         if pool.beats:
             plan.threads.append(pool)
+        self._say("temptations", f"{len(pool.beats)} of {count} requested came back writable")
         # Times are stale now that beats were added; the real schedule is run
         # again during assembly.
         for beat in plan.beats:
@@ -648,6 +678,14 @@ class Generator:
         only fill the space between the current count and that ceiling.
         """
         ceiling = self.difficulty.volumes["everyday_exchanges_max"]
+        written = sum(1 for b in plan.beats if b.text)
+        survive = self._surviving_message_count(plan, duration)
+        self._say(
+            "volume",
+            f"pre-top-up tally: {written} messages written, ~{survive} would survive a "
+            f"trial schedule, target {target} (quota "
+            f"{self.difficulty.volumes['messages_min']}-{self.difficulty.volumes['messages_max']})",
+        )
         try:
             self._ask_for_more(plan, duration, target, ceiling)
         finally:
@@ -661,6 +699,11 @@ class Generator:
                 self._say("volume",
                           f"trimmed {len(drop)} exchange(s) over the quota of {ceiling}")
             self._trim_to_ceiling(plan)
+            self._say(
+                "volume",
+                f"post-top-up tally: {sum(1 for b in plan.beats if b.text)} messages "
+                f"before scheduling",
+            )
 
     def _trim_to_ceiling(self, plan: Plan) -> None:
         """Both ends of the volume rule matter (V20). Over the maximum, the
@@ -688,21 +731,43 @@ class Generator:
         if removed < over:
             self._say("volume", f"still {over - removed} over; nothing cheap left to cut")
 
+    def _surviving_message_count(self, plan: Plan, duration: int) -> int:
+        """How many messages the plan would actually keep after scheduling,
+        not just how many were written.
+
+        `top_up_volume` used to top up against a raw beat count, so a plan
+        that already had `target` messages on paper looked done -- even on a
+        run where scheduling was about to drop a third of them for room,
+        which is exactly the failure mode the rest of this method's docstring
+        warns about (V20 fails on what survives, not on what was written).
+        Running the real scheduler here is cheap: no LLM call, and idempotent
+        over the plan (the scheduler is designed to be run more than once —
+        see `test_the_scheduler_is_idempotent`), so it leaves `plan` exactly
+        as it found it once every beat's `at` is cleared again below.
+        """
+        Scheduler(plan, self.difficulty, self.station).run()
+        have = sum(1 for b in plan.beats if b.at is not None and b.text)
+        for beat in plan.beats:
+            beat.at = None if beat.pin_at is None else beat.pin_at
+        return have
+
     def _ask_for_more(self, plan: Plan, duration: int, target: int, ceiling: int) -> None:
         for _attempt in (1, 2):
-            have = sum(1 for b in plan.beats if b.text)
+            have = self._surviving_message_count(plan, duration)
             exchanges = sum(1 for t in plan.threads if t.grade == "everyday")
             if have >= target:
                 return
             room = ceiling - exchanges
             if room <= 0:
                 self._say("volume",
-                          f"{have} messages, want {target}, but the everyday quota of "
-                          f"{ceiling} exchanges is full — leaving it to the validator")
+                          f"{have} messages would survive scheduling, want {target}, but "
+                          f"the everyday quota of {ceiling} exchanges is full — leaving it "
+                          "to the validator")
                 return
             ask = min(room, max(2, (target - have + 1) // 2))
-            self._say("volume", f"{have} messages, want {target} — asking for {ask} "
-                                f"more exchange(s), {room} of the quota still free")
+            self._say("volume", f"{have} messages would survive scheduling, want {target} "
+                                f"— asking for {ask} more exchange(s), {room} of the quota "
+                                "still free")
             before = len(plan.threads)
             self.write_everyday(plan, duration, ask)
             if len(plan.threads) == before:
@@ -816,6 +881,14 @@ class Generator:
         scenario_id = scenario_id or _new_id(rng)
         vol = self.difficulty.volumes
         everyday = everyday or vol["everyday_exchanges_max"]
+        self._say(
+            "recipe",
+            f"{scenario_id}  duration={duration}s  threads={threads}  "
+            f"everyday_target={everyday} (max {vol['everyday_exchanges_max']})  "
+            f"temptations={temptations}  messages quota={vol['messages_min']}-"
+            f"{vol['messages_max']}  retractions quota={vol['retractions_min']}-"
+            f"{vol['retractions_max']}  repair_attempts={self.difficulty['generator_repair_attempts']}",
+        )
 
         plan = self.build_plan(duration, finale=finale, theme=theme, threads=threads, seed=seed)
         self.write_threads(plan, duration)
@@ -845,12 +918,20 @@ class Generator:
         )
         for note in schedule.notes:
             self.log.append(f"[schedule] {note}")
+        self._say(
+            "assemble",
+            f"{len(scenario.messages)} messages  {len(scenario.retractions())} retractions  "
+            f"{len(scenario.tasks)} tasks  {len(scenario.all_challenges)} challenges  "
+            f"{sum(1 for t in scenario.threads if t.grade == 'everyday')} everyday exchanges",
+        )
 
         report = validate(scenario, station=self.station, difficulty=self.difficulty)
         self._say("validate", report.summary())
+        self._log_breakdown("validate", report)
 
         attempts = 0
         limit = int(self.difficulty["generator_repair_attempts"])
+        signature = _error_signature(report)
         while not report.ok and attempts < limit:
             attempts += 1
             fixed = repair(scenario, report, self.station)
@@ -862,6 +943,19 @@ class Generator:
                 break
             report = validate(scenario, station=self.station, difficulty=self.difficulty)
             self._say("repair", f"attempt {attempts}: {report.summary()}")
+            self._log_breakdown("repair", report)
+            new_signature = _error_signature(report)
+            if new_signature == signature:
+                self._say(
+                    "repair",
+                    f"attempt {attempts} changed nothing the validator can see — the "
+                    "remaining errors have no repair path this run can reach, so further "
+                    "attempts would only repeat this result — stopping early",
+                )
+                break
+            signature = new_signature
+
+        self._log_verdict(report, attempts)
 
         scenario.generator.attempts = attempts
         scenario.generator.prompt_tokens = self.llm.usage.prompt_tokens
@@ -870,6 +964,44 @@ class Generator:
         return GenerationResult(
             scenario=scenario, report=report, plan=plan, attempts=attempts, log=list(self.log)
         )
+
+    def _log_breakdown(self, stage: str, report: Report) -> None:
+        """One line per failing rule with a count and a concrete example, so the
+        cause of a FAIL is visible without opening validation.json."""
+        if report.ok:
+            return
+        by_rule: dict[str, list] = {}
+        for finding in report.errors:
+            by_rule.setdefault(finding.rule, []).append(finding)
+        for rule in sorted(by_rule, key=lambda r: int(r[1:])):
+            findings = by_rule[rule]
+            self._say(
+                stage,
+                f"  {rule} x{len(findings)}: {findings[0].message[:140]}",
+            )
+
+    def _log_verdict(self, report: Report, attempts: int) -> None:
+        """The one line meant to answer 'why did this fail', without having to
+        read the whole repair transcript above it."""
+        if report.ok:
+            self._say("verdict", f"PASSED after {attempts} repair attempt(s): {report.summary()}")
+            return
+        self._say("verdict", f"FAILED after {attempts} repair attempt(s): {report.summary()}")
+        by_rule: dict[str, list] = {}
+        for finding in report.errors:
+            by_rule.setdefault(finding.rule, []).append(finding)
+        for rule in sorted(by_rule, key=lambda r: int(r[1:])):
+            findings = by_rule[rule]
+            fixable = rule in HANDLED_RULES or rule in prompts.TEXT_RULES
+            tag = (
+                "a repair pass targets this rule, but could not clear it"
+                if fixable
+                else "NO repair pass in this codebase handles this rule — it can only be "
+                     "fixed by changing what an earlier LLM stage wrote, or by scheduling "
+                     "leaving it more room"
+            )
+            self._say("verdict", f"  {rule} x{len(findings)} — {tag}")
+            self._say("verdict", f"    e.g. {findings[0]}")
 
 
 DOOR_IN_TEXT = re.compile(r"\b([DH])\s?-?(\d{1,2})\b")
@@ -943,6 +1075,15 @@ def _timeline_text(plan: Plan) -> str:
             f"{beat.kind:<17}{beat.text}{obligations}"
         )
     return "\n".join(rows)
+
+
+def _error_signature(report: Report) -> tuple:
+    """What a repair attempt changed, for the purpose of deciding whether it
+    changed anything at all. (rule, where) rather than the message text, so a
+    repair that reworded a finding without resolving it still counts as
+    progress -- only a rule clearing, or moving to a different message/task,
+    counts."""
+    return tuple(sorted((f.rule, f.where) for f in report.errors))
 
 
 def _new_id(rng: random.Random) -> str:

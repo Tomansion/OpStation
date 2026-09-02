@@ -51,6 +51,17 @@ RETRACTED_MIN_HOLD = 240
 #: turns out dearer breaks V8 after the audio has been rendered.
 _CHALLENGE_PLACEHOLDER = " ".join(["word"] * 200)
 
+#: A representative withdrawal, for `_reserve_retraction_slots`. Unlike the
+#: challenge placeholder this is not a worst case -- a retraction's own
+#: placement is bounded to its real target window regardless (see
+#: `_place_retractions`), so overstating its cost here would only starve
+#: ordinary content for no reason. This is sized like an actual one-line
+#: "stand down" message.
+_RETRACTION_PLACEHOLDER = (
+    "Door Control, stand down on the earlier hold — that instruction is "
+    "lifted now, the situation has changed."
+)
+
 #: Sentence ends, for estimating how much inter-sentence silence the renderer
 #: will add. Piper does its own segmentation; this only has to agree closely.
 SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
@@ -96,6 +107,20 @@ class Scheduler:
         self.window = float(diff["read_budget_window_seconds"])
         self.slack = int(diff["task_slack_after_message_seconds"])
         self.sched = Schedule(duration=self.duration)
+        #: Counters for the end-of-run summary note only -- diagnostics, not
+        #: anything a rule depends on. `run()` is called more than once over
+        #: the same plan (a provisional pass, then the real one in `assemble`),
+        #: so these reflect only the most recent `run()`.
+        self._stat_ordinary_total = 0
+        self._stat_ordinary_dropped = 0
+        self._stat_retraction_requested = 0
+        self._stat_retraction_kept = 0
+        self._stat_retraction_no_live_window = 0
+        self._stat_retraction_over_quota = 0
+        self._stat_retraction_no_room_in_window = 0
+        self._stat_retraction_stranded = 0
+        self._stat_temptation_requested = 0
+        self._stat_temptation_kept = 0
 
     # ------------------------------------------------------------- helpers
 
@@ -152,7 +177,11 @@ class Scheduler:
             return self.duration - 40
         return min(self.duration - 40, min(seal_pins) - self.gap)
 
-    def _place(self, beat: BeatSpec, earliest: int) -> int:
+    def _place(self, beat: BeatSpec, earliest: int, ceiling: int | None = None) -> int:
+        """`ceiling` overrides the normal end-of-session limit for this one
+        placement -- used by `_place_retractions` so a withdrawal can never be
+        walked past the end of the window it is meant to land inside (see its
+        docstring). Defaults to `_seal_ceiling()`, the ordinary limit."""
         lo, hi = self.phase_window(beat.phase)
         cost = self.read_cost(beat)
         if beat.pin_at is not None:
@@ -160,7 +189,8 @@ class Scheduler:
             self.sched.placed.append(Placed(at=beat.at, cost=cost, beat=beat))
             return beat.at
         at = max(earliest, lo)
-        ceiling = self._seal_ceiling()
+        capped = ceiling is not None
+        ceiling = self._seal_ceiling() if ceiling is None else min(ceiling, self._seal_ceiling())
         # Walk forward until the density rule is satisfied. Steps of `gap` keep
         # this cheap; the budget is the binding constraint, not the gap.
         guard = 0
@@ -170,11 +200,16 @@ class Scheduler:
             if guard > 4000:
                 break
         if at > ceiling:
-            # There is no room left in the session. Dropping the beat is the only
-            # honest option: placing it past the end would fail V2, and squeezing
-            # it in would fail the reading budget the player actually needs.
+            # There is no room left in the session (or, if `ceiling` was capped
+            # by the caller, no room before the caller's own limit -- e.g. a
+            # retraction's target window closing). Dropping the beat is the
+            # only honest option: placing it past the end would fail V2, and
+            # squeezing it in would fail the reading budget the player
+            # actually needs.
+            reason = "no room left before its target window closes" if capped \
+                else "no room left in the session"
             self.sched.notes.append(
-                f"{beat.key}: no room left in the session — dropped"
+                f"{beat.key}: {reason} — dropped"
             )
             beat.at = None
             return -1
@@ -203,8 +238,12 @@ class Scheduler:
         # The three in-session questions are appointments, so their slots are
         # reserved before anything competes for the reading budget. Placing them
         # last -- after 70-odd messages have filled every 60 s window -- leaves
-        # nowhere legal to put them.
+        # nowhere legal to put them. Retractions get the same treatment, for the
+        # same reason: they too are placed in a later pass, and without a
+        # reservation the ordinary pass below has already spent the budget they
+        # needed.
         self._reserve_challenge_slots()
+        self._reserve_retraction_slots()
         self._place_pinned()
         self._place_ordinary_beats()
         self._enforce_message_spacing()
@@ -229,11 +268,31 @@ class Scheduler:
         self._drop_stranded_retractions()
         self._place_challenges()
         self._recompute_phase_spans()
+        self._log_summary()
         return self.sched
+
+    def _log_summary(self) -> None:
+        """One line that answers 'did this run have enough room', without
+        having to count 'no room left' notes by hand. This is what the
+        generator's volume and retraction validator failures (V20, V30) come
+        from far more often than a writing mistake, so it belongs beside the
+        per-beat notes above it, not only in the final validator report."""
+        self.sched.notes.append(
+            f"placed {self._stat_ordinary_total - self._stat_ordinary_dropped}/"
+            f"{self._stat_ordinary_total} ordinary beats "
+            f"({self._stat_ordinary_dropped} dropped for room); "
+            f"retractions {self._stat_retraction_kept}/{self._stat_retraction_requested} kept "
+            f"({self._stat_retraction_no_live_window} had no live window, "
+            f"{self._stat_retraction_no_room_in_window} had a window but no room in it, "
+            f"{self._stat_retraction_over_quota} were genuinely over the quota, "
+            f"{self._stat_retraction_stranded} landed outside their own window); "
+            f"temptations {self._stat_temptation_kept}/{self._stat_temptation_requested} kept"
+        )
 
     def _drop_stranded_retractions(self) -> None:
         """Last word on withdrawals: after every adjustment, is each one still
         inside something it can actually cancel?"""
+        self._stat_retraction_stranded = 0
         for beat in self.plan.beats:
             if beat.kind != "retraction" or beat.at is None:
                 continue
@@ -245,6 +304,8 @@ class Scheduler:
                     "kept as a status message"
                 )
                 self.sched.demoted_retractions.add(beat.key)
+                self._stat_retraction_stranded += 1
+                self._stat_retraction_kept = max(0, self._stat_retraction_kept - 1)
 
     def _reserve_challenge_slots(self) -> None:
         """Hold the nominal slots open in the reading budget."""
@@ -256,6 +317,48 @@ class Scheduler:
                 pin_at=at, at=at,
             )
             self.sched.placed.append(Placed(at=at, cost=cost, beat=marker))
+
+    def _reserve_retraction_slots(self) -> None:
+        """Hold a little reading budget open across the middle of the session
+        for the withdrawals that have not been placed yet.
+
+        Retractions are placed by `_place_retractions`, well after
+        `_place_ordinary_beats` has already packed the budget densely -- so a
+        retraction was only ever as likely to fit as whatever that first pass
+        happened to leave behind, which is why they are so often the first
+        thing lost to "no room". Reserving a little room ahead of time, the
+        same way `_reserve_challenge_slots` already does for questions, gives
+        the later, precisely-targeted retraction pass somewhere to actually
+        land.
+
+        This cannot reserve the RIGHT second -- a retraction's real target
+        window is only known once its own obligation has been placed and
+        timed, which happens after this runs -- so it is deliberately coarse:
+        one slot per retraction candidate (capped the same way
+        `_place_retractions` caps itself), spread evenly across the span
+        retractions are actually allowed to land in (after phase 1, per V30,
+        and clear of the very end).
+        """
+        candidates = [b for b in self.plan.beats if b.kind == "retraction"]
+        if not candidates:
+            return
+        quota = int(self.diff.volumes["retractions_max"])
+        count = min(len(candidates), quota + 1)
+        marker_cost = self.read_cost(BeatSpec(
+            key="__retraction_slot", thread_key="__slots", phase=1,
+            actor_type="system", channel="radio", kind="chatter",
+            text=_RETRACTION_PLACEHOLDER,
+        ))
+        span = (0.20, 0.78)
+        for index in range(count):
+            frac = span[0] + (index + 0.5) * (span[1] - span[0]) / count
+            at = int(frac * self.duration)
+            marker = BeatSpec(
+                key=f"__retraction_slot_{index + 1}", thread_key="__slots",
+                phase=phase_at(at, self.duration), actor_type="system", channel="radio",
+                kind="chatter", text="", pin_at=at, at=at,
+            )
+            self.sched.placed.append(Placed(at=at, cost=marker_cost, beat=marker))
 
     def _nominal_challenge_times(self) -> list[int]:
         """Where the in-session questions want to be: starting as soon as phase
@@ -462,7 +565,10 @@ class Scheduler:
 
     def _place_ordinary_beats(self) -> None:
         cursor = 0
+        self._stat_ordinary_total = 0
+        self._stat_ordinary_dropped = 0
         for beat in self._ordering():
+            self._stat_ordinary_total += 1
             earliest = cursor
             thread = self.plan.thread_of(beat.thread_key)
             previous = self._last_of_thread(beat.thread_key)
@@ -477,6 +583,8 @@ class Scheduler:
             at = self._place(beat, earliest)
             if at >= 0:
                 cursor = at + self.gap
+            else:
+                self._stat_ordinary_dropped += 1
 
     def _place_retractions(self) -> None:
         """Place the withdrawals, keeping at most the quota.
@@ -494,6 +602,11 @@ class Scheduler:
         phase2_start = self.phase_window(2)[0]
         quota = int(self.diff.volumes["retractions_max"])
         candidates = [b for b in self.plan.beats if b.kind == "retraction"]
+        self._stat_retraction_requested = len(candidates)
+        self._stat_retraction_kept = 0
+        self._stat_retraction_no_live_window = 0
+        self._stat_retraction_over_quota = 0
+        self._stat_retraction_no_room_in_window = 0
         for beat in candidates:
             beat.cancels = [
                 c for c in (self.plan.resolve_group(c) for c in beat.cancels) if c
@@ -521,15 +634,29 @@ class Scheduler:
             # much later, after everything else has finished moving, and can
             # still lose one of these to a target window that shifted out from
             # under it. Attempting one extra costs nothing when it is not needed.
-            if usable and kept < quota + 1:
+            attempted = bool(usable) and kept < quota + 1
+            if attempted:
                 start, end, lower, upper = max(usable, key=lambda w: w[1] - w[0])
                 # Comfortably inside: late enough that the player has held the
                 # obligation for a while, early enough that dropping it matters.
                 target = min(max(start + max(15, int(0.4 * (end - start))), lower), upper)
                 beat.phase = phase_at(target, self.duration)
-                placed_at = self._place(beat, target)
+                # `ceiling=upper` is load-bearing, not a style choice: `_place`'s
+                # own forward search only stops at the *session's* ceiling, which
+                # is normally far later than `upper`. Without capping it here, a
+                # crowded window lets the search walk straight past the end of
+                # the obligation the withdrawal is meant to land inside -- it
+                # still "succeeds" and increments `kept`, consuming a quota slot,
+                # and only `_drop_stranded_retractions` notices afterward that it
+                # landed outside every window it cancels. By then a lower-ranked
+                # candidate that *did* fit inside its own window has already been
+                # skipped for nothing. Capping the search here means a retraction
+                # that cannot fit its own window fails immediately and honestly,
+                # leaving the next candidate its chance.
+                placed_at = self._place(beat, target, ceiling=upper)
                 if placed_at >= 0:
                     kept += 1
+                    self._stat_retraction_kept += 1
                     continue
                 # `_place` found no room and dropped it -- this attempt did not
                 # actually succeed, so it must not consume a quota slot that a
@@ -537,7 +664,18 @@ class Scheduler:
                 # Fall through and give it the demoted placement below, which
                 # tries an earlier, less contested target.
             live = usable
-            reason = "nothing it cancels is still live" if not live else f"over the quota of {quota}"
+            if not live:
+                reason = "nothing it cancels is still live"
+                self._stat_retraction_no_live_window += 1
+            elif attempted:
+                # A window existed and was tried, but even the capped search
+                # inside it found nowhere that fit -- this is the room problem,
+                # not a genuine surplus (see the ceiling=upper comment above).
+                reason = "no room within its own window, even though one exists"
+                self._stat_retraction_no_room_in_window += 1
+            else:
+                reason = f"over the quota of {quota}"
+                self._stat_retraction_over_quota += 1
             self.sched.notes.append(f"{beat.key}: {reason} — kept as a status message")
             self.sched.demoted_retractions.add(beat.key)
             self._place(beat, self.phase_window(max(2, beat.phase))[0])
@@ -579,9 +717,12 @@ class Scheduler:
     def _place_temptations(self) -> None:
         """A tempting request is only tempting if a *different* thread's hold is
         live when it arrives (V17)."""
+        self._stat_temptation_requested = 0
+        self._stat_temptation_kept = 0
         for beat in self.plan.beats:
             if beat.kind != "tempting_request":
                 continue
+            self._stat_temptation_requested += 1
             target = self.plan.resolve_group(beat.targets_group)
             windows = []
             for owner, task in self.plan.tasks_of_group(target or ""):
@@ -605,7 +746,8 @@ class Scheduler:
             start, end, _ = max(windows, key=lambda w: w[1] - w[0])
             middle = start + (end - start) // 2
             beat.phase = phase_at(middle, self.duration)
-            self._place(beat, middle)
+            if self._place(beat, middle) >= 0:
+                self._stat_temptation_kept += 1
 
     @staticmethod
     def _is_slot(beat: BeatSpec) -> bool:
