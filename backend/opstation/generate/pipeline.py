@@ -200,8 +200,20 @@ class Generator:
             and not any(b.kind == "retraction" for b in t.beats)
         ]
         have = sum(1 for b in plan.beats if b.kind == "retraction")
-        need = max(0, self.difficulty.volumes["retractions_min"] - have)
-        if not wanted or not need:
+        # Chased up to the MAXIMUM, not the minimum, for the same reason
+        # build_plan marks retractions_max threads in the first place: more of
+        # them are lost later, to a window with no room left or a target that
+        # does not survive scheduling, than are lost here. Stopping at the
+        # minimum leaves no margin against that second round of attrition, and
+        # the scenario routinely lands under quota (V30) as a result.
+        need = max(0, self.difficulty.volumes["retractions_max"] - have)
+        if not wanted:
+            self._say("retractions", f"{have} written by the thread stage; every marked "
+                                      "thread already has one — nothing to chase")
+            return
+        if not need:
+            self._say("retractions", f"{have} written by the thread stage already meets "
+                                      "the quota — nothing to chase")
             return
         self._say("retractions", f"{have} written by the thread stage; asking for {need} more")
 
@@ -801,7 +813,18 @@ class Generator:
         self.write_temptations(plan, duration, temptations)
         self.align_speakers(plan)
         self.normalise_retractions(plan)
-        self.top_up_volume(plan, duration, vol["messages_min"] + 6)
+        # Targeted a bit above the minimum, not just past it: scheduling has
+        # not run yet, and V15 drops, "no room" drops and conflict resolution
+        # all still lie ahead. A target that only clears the minimum leaves no
+        # margin against that attrition, and the scenario routinely lands
+        # under quota (V20) as a result -- the same reasoning as the
+        # retraction top-up above. `top_up_volume` still trims back down to
+        # `messages_max` on the way out, so overshooting here is harmless on
+        # its own -- but pushed too far it crowds the session enough that
+        # retraction targets lose their live window before `_place_retractions`
+        # ever runs, trading a V20 shortfall for a V30 one. +10 is a
+        # deliberately smaller margin than the first attempt at this (+15).
+        self.top_up_volume(plan, duration, vol["messages_min"] + 10)
         self.write_challenges(plan, duration)
 
         scenario, schedule = assemble(

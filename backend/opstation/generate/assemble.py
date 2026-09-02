@@ -182,6 +182,7 @@ def assemble(
                     hold=hold,
                     require=_require_for(spec, station),
                     fail_message=spec.fail_message,
+                    confirm=(hold == 0 and spec.delay == 0),
                     derived_from=(
                         DerivedFrom(
                             isolation_target=spec.isolation_target,

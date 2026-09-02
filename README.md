@@ -48,9 +48,9 @@ backend/opstation/
   station.py       the door graph; recomputes every isolation cut-set from it
   engine.py        the session runtime — tasks, holds, cascade, queue, scoring
   session.py       the asyncio clock and per-session persistence
-  validator/       the 35 rules, and the perfect-player simulation
+  validator/       the 38 rules, and the perfect-player simulation
   generate/        five LLM stages, a deterministic scheduler, Piper TTS
-  app.py           FastAPI: REST, WebSocket, admin
+backend/websrv.py  FastAPI: REST, WebSocket, admin
 ```
 
 ## Look at the station

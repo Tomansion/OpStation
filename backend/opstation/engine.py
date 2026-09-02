@@ -273,6 +273,13 @@ class Engine:
         self._task_state[task.id] = "passed"
         self._task_resolved_at[task.id] = now
         self._log(now, "task_passed", task_id=task.id, group_id=task.group_id)
+        if task.confirm:
+            # A right-now instruction, carried out right now: a small, silent
+            # acknowledgement rather than nothing at all. It never enters the
+            # queue -- it does not need reading or dismissing, and it must not
+            # compete with real traffic for the player's attention.
+            text = ", ".join(f"{door} {state}" for door, state in task.require.items())
+            self._log(now, "task_confirmed", task_id=task.id, text=text)
 
     def _fail_task(self, task: Task, now: float, door: str) -> None:
         self._task_state[task.id] = "failed"

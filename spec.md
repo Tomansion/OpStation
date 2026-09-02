@@ -277,12 +277,28 @@ Every message has a `channel`:
 
 | Channel | Presentation |
 |---|---|
-| `text` | Written text in the modal. No audio. |
-| `radio` | **Audio only** — pre-rendered TTS in the sender's voice, with a simple waveform animation. No transcript, ever, and **no fallback**: if the audio cannot be played the session is void, not degraded. |
+| `text` | Written text in the modal, revealed character by character rather than all at once. No audio underneath other than a soft typing cue. |
+| `radio` | **Audio only** — pre-rendered TTS in the sender's voice, bookended by a channel-open and channel-close cue with quiet static underneath, and a CSS "speaking" bar animation. No transcript, ever, and **no fallback**: if the audio cannot be played the session is void, not degraded. |
 
 Radio messages carry more memory load than text, which is the point. Transcripts exist in the scenario JSON and are visible on the admin page only — never to the player, in any circumstance.
 
 **Audio unlock.** Browsers block audio until the page has received a user gesture, so a session that opened silently would be unplayable and unrecoverable. The **Start shift** button is that gesture: it must both create the session and prime the audio context, and the client must verify playback works before the clock starts. If priming fails, refuse to start the session rather than beginning one that will have to be thrown away.
+
+#### 5.1.1 Sound design
+
+Every cue is a short fixed asset in `assets/sfx/`, played through a plain `HTMLAudioElement` (no Web Audio graph — that machinery buys nothing for a handful of one-shots and loops, and connecting an `AnalyserNode` is a well-known way to end up with audio that silently never reaches the speakers). Assets:
+
+| Asset | Used for |
+|---|---|
+| `door_open.wav` / `door_close.wav` | Played once per door whose state actually changed between two server pushes — diffed against the previous snapshot, never against the click, so it reflects what happened rather than what was attempted. |
+| `notification.wav` | Played once whenever `pending_count` increases. |
+| `radio_start.wav` / `radio_end.wav` | Bookend a radio message's voice audio: the start cue plays, *then* the voice, then the end cue on `ended`. Sequential, not layered, so the words never compete with the effects. `radio_end.wav` also plays at the end of a text message's character reveal (§5.1, `text` row) — the same "transmission closed" cue serves both channels. |
+| `radio_noise.wav` | Quiet (≈6% volume) station static, looped under the start cue and the voice, seeded at a **random offset** into the file on every play so it never sounds identically looped twice. Faded in over 0.6 s rather than starting abruptly. |
+| `writing.wav` | Looped, faded in over 0.3 s, under a `text` message's character-by-character reveal; stopped and faded out the moment the last character lands. |
+
+**The radio waveform is pure CSS**, not a frequency-domain reading of the audio: a row of bars with a `@keyframes` pulse, toggled by a `.playing` class the instant the voice begins. This is a deliberate simplification over an `AnalyserNode`-driven visualisation — the earlier version could silently fail to hook up (leaving the panel looking dead while the audio played perfectly well) or, worse, redirect the element's output through a graph that was never connected back to the destination. A CSS animation cannot fail that way: if the class is toggled, it animates, on every browser, independent of whether the analyser API exists or behaves.
+
+**Cleanup.** Every sound and timer started while a modal is open is tracked, and stopped unconditionally when the modal closes — whether by Acknowledge or by the next queued item replacing it. Radio is audio-only and heard once; a background loop or a voice clip left playing after its modal has gone would quietly reopen the "no replay" guarantee (§1) from underneath it.
 
 ### 5.2 The queue
 
@@ -378,6 +394,8 @@ The validator (rule V17) requires every message marked `kind: "tempting_request"
 ### 6.6 Immediate tasks
 
 An "act now" instruction is a task with `hold: 0` and a small offset from the message. The generator must not produce an instruction to open a door that is already open (or close one already closed) in the perfect-player trace — validator rule V15. Such a task would be a silent free pass.
+
+**Confirmation.** A task with `hold: 0` *and* `delay: 0` — nothing to hold, no offset, an instruction complied with immediately — sets `Task.confirm: true` at assembly time. When such a task passes, the engine logs `task_confirmed` with a text composed mechanically from `require` (`"D3 open"`, never authored prose) and the session broadcasts it directly over the websocket as `{"type": "confirmed", "text": ...}`. This bypasses the FIFO queue entirely: it needs no opening and no acknowledging, and must never compete with a real message for the player's attention. The client renders it as a small toast that dismisses itself after a few seconds. A task with any `hold` is never confirmed — it is judged much later, when a ping would be noise rather than reassurance.
 
 ---
 
@@ -888,7 +906,7 @@ A **Generate scenario** button on the admin page starts a generation job with a 
 
 ## 13. Scenario validator
 
-Every scenario must pass all 35 rules before it can be played. The report is written to `validation.json` and shown on the admin page.
+Every scenario must pass all 38 rules before it can be played. The report is written to `validation.json` and shown on the admin page.
 
 ### 13.1 Structural
 
@@ -962,6 +980,16 @@ Every scenario must pass all 35 rules before it can be played. The report is wri
 
 Most players will not be native English speakers, and a `radio` message is heard exactly once with no transcript and no replay. That makes reading difficulty a **confound, not a style preference**: a player who fails because they could not decode *"buy me some time"* in one hearing has been measured on their English, not on their memory — which is the one thing the instrument exists to measure.
 
+### 13.8 Player-facing integrity
+
+| # | Rule |
+|---|---|
+| V36 | **A message is never a question.** No `Message.text` may contain `?`. Only a `challenge` has a reply interface; a plain message that poses a question dead-ends, since there is no way for the player to answer it. |
+| V37 | **No internal id reaches the player.** `m_012`, `t_045`, `og_ext_vent` and similar bookkeeping ids must never appear in a message, a `fail_message`, or a challenge's `prompt`, `explanation` or option text. The player has never seen an id; a challenge's `explanation` in particular is written last, with the annotated timeline in view, and it is easy to cite a record instead of describing what happened. |
+| V38 | **Time answers are in minutes, never hours.** For a `kind: "time"` challenge, the prompt, the explanation, and the *correct* option may not name hours: the whole shift is under half an hour and no single hold may exceed 30% of it (§12.1.1), so an hour-scale correct answer cannot be what actually happened. A wrong option may name hours on purpose, as an implausible order-of-magnitude distractor (V19) — only the right answer is checked. |
+
+Each of these was found by playtesting rather than by design review: a chatter message phrased as a question the player had no way to answer, a challenge explanation that cited `m_032` as its justification, and a "how long was it sealed" question whose correct answer was given in hours despite the shift lasting well under thirty minutes.
+
 The rule is enforced rather than merely requested because models drift toward colour. The first passing scenario contained *"vent starts in two mikes"* — military slang for minutes, invisible to a native speaker and opaque to everyone else. V35 is in the set of rules the repair loop sends back for rewriting, so the fix costs one call.
 
 Standard radio procedure words are **not** slang and are deliberately not on the list. *"Copy"*, *"stand by"*, *"say again"* are consistent, learnable and part of what makes the fiction work. What is banned is figurative language, invented jargon, and humour.
@@ -1021,8 +1049,8 @@ backend/
     bank.py             the scenario bank and what makes an entry playable
     app.py              FastAPI: REST, WebSocket, admin
     validator/
-      __init__.py       runs all 35 rules, builds the report
-      rules.py          one function per rule, v01 .. v35
+      __init__.py       runs all 38 rules, builds the report
+      rules.py          one function per rule, v01 .. v38
       simulate.py       the perfect-player simulation
       findings.py       the report, including the form the LLM repairs from
     generate/
@@ -1103,7 +1131,7 @@ The `state` payload is deliberately one shape rather than a family of typed even
 | **Summary** `/summary/:id` | The debrief breakdown from §9.1. |
 | **Admin** `/admin` | App status, bank inventory with validity, session history, **Generate scenario**. |
 | **Admin — session** `/admin/sessions/:id` | Full replay data: actors, threads, every message with delivery/open/ack timestamps, task results, door-state timeline vs. expected trace, challenges and answers, penalties, elapsed time. Delete button. |
-| **Admin — scenario** `/admin/scenarios/:id` | Scenario JSON, validation report, perfect-player trace, radio transcripts, audio playback. |
+| **Admin — scenario** `/admin/scenarios/:id` | Scenario JSON, validation report, perfect-player trace, radio transcripts, audio playback, a per-thread panel (story summary plus every message belonging to it), a thread-coloured message timeline, a message-density chart in 4-minute buckets, and a per-door chart of every window a real obligation requires it open or closed — which makes a genuine scheduler contradiction (two live obligations disagreeing on one door) visible at a glance, and distinguishes it from a conflicting request (§6.5), which shows no obligation bar at all because it has no task behind it. |
 
 The admin pages exist to debug and tune generation; they are the only place ground truth is visible.
 

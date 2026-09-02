@@ -64,6 +64,12 @@ class Session:
         }
         if any(e.kind in interesting for e in events):
             await self.push_state()
+        # Confirmations bypass the queue entirely -- broadcast directly rather
+        # than folding into public_state, which only ever describes the front
+        # of the queue.
+        for event in events:
+            if event.kind == "task_confirmed":
+                await self.broadcast({"type": "confirmed", "text": event.detail["text"]})
 
     # ------------------------------------------------------------------ loop
 

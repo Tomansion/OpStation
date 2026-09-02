@@ -64,6 +64,29 @@ def test_instantaneous_task_checks_once():
     assert e.task_state("t_1") == "failed"  # never opened
 
 
+def test_a_confirmed_task_logs_a_confirmation_but_never_enters_the_queue():
+    """A right-now instruction (no hold, no delay) that the player carried out
+    gets a quiet confirmation instead of nothing -- but it bypasses the queue
+    entirely: it needs no opening and no acknowledging, and must not compete
+    with real traffic for the player's attention."""
+    e = eng(messages=[], tasks=[hold_task(hold=0, require={"D3": "open"}, confirm=True)])
+    e.toggle_door("D3", now=50)  # D3 starts closed; this opens it, ahead of the check
+    e.advance_to(201)
+    assert e.task_state("t_1") == "passed"
+    confirmed = next(ev for ev in e.events if ev.kind == "task_confirmed")
+    assert confirmed.detail["text"] == "D3 open"
+    assert e.queue == []
+
+
+def test_a_task_with_a_hold_gets_no_confirmation():
+    """Confirmation is for right-now instructions only. A held obligation is
+    judged much later, and pinging every quiet pass would turn it into noise."""
+    e = eng(tasks=[hold_task()])  # hold=300, confirm defaults to False
+    e.advance_to(600)
+    assert e.task_state("t_1") == "passed"
+    assert not any(ev.kind == "task_confirmed" for ev in e.events)
+
+
 def test_group_cascade_costs_exactly_one_penalty():
     """One broken obligation, one penalty -- and no false credit for a later
     task that happens to be satisfied for the wrong reason (spec 6.4)."""

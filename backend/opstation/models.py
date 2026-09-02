@@ -62,6 +62,11 @@ class Task(Base):
     require: dict[str, DoorState]
     fail_message: str
     derived_from: DerivedFrom | None = None
+    #: True for a task with no hold and no delay: an instruction that asked for
+    #: something right now, checked right now. These are the only tasks worth
+    #: confirming -- anything with a hold is judged much later, when its own
+    #: pass is silent and unremarkable.
+    confirm: bool = False
 
     @property
     def until(self) -> int:

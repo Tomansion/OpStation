@@ -1,6 +1,6 @@
 """The validator rules (spec 13).
 
-One function per rule, named `v01` .. `v35`, each yielding Findings. Keeping
+One function per rule, named `v01` .. `v38`, each yielding Findings. Keeping
 them separate and numbered means the report the LLM repairs from cites exactly
 the rule the spec states, and a rule can be read next to its spec line.
 
@@ -1354,4 +1354,84 @@ def _all_prose(ctx: Ctx) -> Iterator[tuple[str, str, bool]]:
             yield ch.id, option.text, False
 
 
+def v36(ctx: Ctx) -> Iterator[Finding]:
+    """A message is never answerable, so it must never ask a question.
+
+    Only a `challenge` has a reply interface. A plain message that ends
+    "...is the reactor corridor still off-limits?" reads as a question the
+    player is expected to answer, and there is no way to: it just sits there
+    unresolved. Say it as a report or a statement instead.
+    """
+    for msg in ctx.scenario.messages:
+        if "?" in msg.text:
+            yield Finding(
+                "V36",
+                "a message can never be answered — there is no reply interface "
+                "outside a challenge. Rephrase the question as a statement",
+                msg.id,
+            )
+
+
+#: Internal bookkeeping ids: m_012, t_045, og_ext_vent, th_reactor, q_003.
+#: Deliberately scoped to the underscore-joined shapes the generator actually
+#: mints, so a door token like D7 or a place like "Extension Epsilon" never
+#: matches.
+INTERNAL_ID_RE = re.compile(r"\b(?:m|t|q|th|og|a)_[a-z0-9][a-z0-9_]*\b", re.IGNORECASE)
+
+
+def v37(ctx: Ctx) -> Iterator[Finding]:
+    """No internal id ever reaches the player.
+
+    m_012, t_045, og_ext_vent and friends are bookkeeping for the generator and
+    the admin page. A challenge's `explanation` is written last, with the full
+    annotated timeline in view, and it is easy to cite the message id just read
+    instead of describing what happened. The player has never seen an id, and
+    the string means nothing to them.
+    """
+    texts: list[tuple[str, str]] = [(m.id, m.text) for m in ctx.scenario.messages]
+    texts += [(t.id, t.fail_message) for t in ctx.scenario.tasks]
+    for ch in ctx.scenario.all_challenges:
+        texts.append((ch.id, ch.prompt))
+        texts.append((ch.id, ch.explanation))
+        texts += [(ch.id, o.text) for o in ch.options]
+    for where, text in texts:
+        for match in INTERNAL_ID_RE.finditer(text):
+            yield Finding(
+                "V37",
+                f"names the internal id {match.group(0)!r}, which means nothing to a "
+                "player — describe what happened instead of citing the record",
+                where,
+            )
+
+
+def v38(ctx: Ctx) -> Iterator[Finding]:
+    """A 'time' challenge is reasoning about this shift, which is under half an
+    hour long and where no obligation holds longer than 30% of it: the RIGHT
+    answer measured in hours cannot be what actually happened, and is an
+    authoring mistake rather than a hard question.
+
+    Only the prompt, the explanation and the correct option are checked. A
+    wrong option is allowed to name hours on purpose -- an implausible order of
+    magnitude is a legitimate distractor (V19), and a player who knows the
+    shift lasts thirty minutes should find it easy to rule out.
+    """
+    for ch in ctx.scenario.all_challenges:
+        if ch.kind != "time":
+            continue
+        correct = ch.correct_option()
+        texts = [ch.prompt, ch.explanation] + ([correct.text] if correct else [])
+        for text in texts:
+            if re.search(r"\bhours?\b", text, re.IGNORECASE):
+                yield Finding(
+                    "V38",
+                    f"the correct answer names hours, but the whole shift lasts "
+                    f"{ctx.scenario.duration_seconds // 60} minutes: {text[:70]!r}",
+                    ch.id,
+                )
+                break
+
+
 ALL_RULES.append(v35)
+ALL_RULES.append(v36)
+ALL_RULES.append(v37)
+ALL_RULES.append(v38)

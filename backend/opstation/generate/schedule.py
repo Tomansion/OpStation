@@ -138,6 +138,20 @@ class Scheduler:
                 return False
         return True
 
+    def _seal_ceiling(self) -> int:
+        """The end-of-shift seal is pinned to be the last real message (V21).
+        No ordinary, unpinned beat may be walked forward onto or past it, or
+        the seal stops being last -- `_place`'s generic ceiling alone is not
+        tight enough to guarantee that, since it is normally much later than
+        the seal's own pin."""
+        seal_pins = [
+            b.pin_at for b in self.plan.beats
+            if b.pin_at is not None and any(t.seal_station for t in b.tasks)
+        ]
+        if not seal_pins:
+            return self.duration - 40
+        return min(self.duration - 40, min(seal_pins) - self.gap)
+
     def _place(self, beat: BeatSpec, earliest: int) -> int:
         lo, hi = self.phase_window(beat.phase)
         cost = self.read_cost(beat)
@@ -146,7 +160,7 @@ class Scheduler:
             self.sched.placed.append(Placed(at=beat.at, cost=cost, beat=beat))
             return beat.at
         at = max(earliest, lo)
-        ceiling = self.duration - 40
+        ceiling = self._seal_ceiling()
         # Walk forward until the density rule is satisfied. Steps of `gap` keep
         # this cheap; the budget is the binding constraint, not the gap.
         guard = 0
@@ -244,10 +258,13 @@ class Scheduler:
             self.sched.placed.append(Placed(at=at, cost=cost, beat=marker))
 
     def _nominal_challenge_times(self) -> list[int]:
-        """Where the in-session questions want to be: spread across the second
-        half, clear of the very end."""
+        """Where the in-session questions want to be: starting as soon as phase
+        3 ("Memory") has had a little room to establish something worth being
+        asked about, spread on to clear of the very end. The first question
+        used to land around the 56% mark -- fifteen minutes into a 27-minute
+        shift -- which is a long time to go without one."""
         count = int(self.diff.volumes["challenges_in_session"])
-        span = (0.56, 0.93)
+        span = (0.40, 0.90)
         if count == 1:
             return [int(0.7 * self.duration)]
         step = (span[1] - span[0]) / (count - 1)
@@ -305,6 +322,25 @@ class Scheduler:
             return cut.required(task.include_hangar_doors)
         return {k.upper(): v for k, v in task.require.items()}
 
+    def _retraction_protected_task_ids(self) -> set[int]:
+        """Tasks a retraction means to withdraw. `_floor_retracted_holds`
+        floors these to `RETRACTED_MIN_HOLD` so the withdrawal has somewhere
+        to land inside their window; conflict resolution must not immediately
+        undo that by truncating one back below the floor; the retraction is
+        placed later; and by then it would have no live window left to attach
+        to (V30). Computed from the plan alone, so it is known before any
+        scheduling pass runs."""
+        protected: set[int] = set()
+        for beat in self.plan.beats:
+            if beat.kind != "retraction":
+                continue
+            for group_key in (self.plan.resolve_group(c) for c in beat.cancels):
+                if not group_key:
+                    continue
+                for _owner, task in self.plan.tasks_of_group(group_key):
+                    protected.add(id(task))
+        return protected
+
     def _resolve_conflicts(self) -> None:
         """Guarantee that no two live obligations demand opposite states on one
         door at one moment (V13), which is also what makes the perfect-player
@@ -319,7 +355,11 @@ class Scheduler:
              it, which is what the fiction implies anyway;
           2. push the later obligation past the earlier one;
           3. drop whichever carries less content.
+
+        A task a retraction depends on is protected from (1) below the floor
+        that made it withdrawable, and is not preferred as the loser in (3).
         """
+        protected = self._retraction_protected_task_ids()
         entries = self._entries()
         for _ in range(400):
             pair = self._first_conflict(entries)
@@ -329,7 +369,8 @@ class Scheduler:
             a_end, b_end = a["at"] + a["hold"], b["at"] + b["hold"]
             truncated = b["at"] - CONFLICT_GAP - a["at"]
             tail = SEAL_TAIL if b["task"].seal_station else ORDINARY_TAIL
-            if a["hold"] > 0 and truncated >= MIN_USEFUL_HOLD:
+            a_would_break_floor = a["key"] in protected and truncated < RETRACTED_MIN_HOLD
+            if a["hold"] > 0 and truncated >= MIN_USEFUL_HOLD and not a_would_break_floor:
                 self.sched.notes.append(
                     f"conflict on {a['door']}: {a['beat'].key} hold "
                     f"{a['hold']}->{truncated}s, superseded by {b['beat'].key}"
@@ -343,7 +384,13 @@ class Scheduler:
                 )
                 b["at"] = new_at
             else:
-                loser = a if a["hold"] <= b["hold"] else b
+                a_protected, b_protected = a["key"] in protected, b["key"] in protected
+                if a_protected and not b_protected:
+                    loser = b
+                elif b_protected and not a_protected:
+                    loser = a
+                else:
+                    loser = a if a["hold"] <= b["hold"] else b
                 self.sched.notes.append(
                     f"conflict on {a['door']}: dropped {loser['beat'].key}'s task "
                     f"(no room to separate it from the other obligation)"
@@ -470,15 +517,25 @@ class Scheduler:
                 upper = end - 10
                 if upper >= lower:
                     usable.append((start, end, lower, upper))
-            if usable and kept < quota:
+            # A little slack above the quota: `_drop_stranded_retractions` runs
+            # much later, after everything else has finished moving, and can
+            # still lose one of these to a target window that shifted out from
+            # under it. Attempting one extra costs nothing when it is not needed.
+            if usable and kept < quota + 1:
                 start, end, lower, upper = max(usable, key=lambda w: w[1] - w[0])
                 # Comfortably inside: late enough that the player has held the
                 # obligation for a while, early enough that dropping it matters.
                 target = min(max(start + max(15, int(0.4 * (end - start))), lower), upper)
                 beat.phase = phase_at(target, self.duration)
-                self._place(beat, target)
-                kept += 1
-                continue
+                placed_at = self._place(beat, target)
+                if placed_at >= 0:
+                    kept += 1
+                    continue
+                # `_place` found no room and dropped it -- this attempt did not
+                # actually succeed, so it must not consume a quota slot that a
+                # lower-ranked, placeable candidate could have used instead.
+                # Fall through and give it the demoted placement below, which
+                # tries an earlier, less contested target.
             live = usable
             reason = "nothing it cancels is still live" if not live else f"over the quota of {quota}"
             self.sched.notes.append(f"{beat.key}: {reason} — kept as a status message")
@@ -564,7 +621,12 @@ class Scheduler:
             (p for p in self.sched.placed if p.beat.at is not None),
             key=lambda p: (p.at, p.beat.key),
         )
-        ceiling = self.duration - 40
+        # The same ceiling `_place` uses: pushing an unpinned beat forward to
+        # resolve a spacing clash must not walk it onto or past the pinned
+        # end-of-shift seal either, or V21 breaks the same way it did before
+        # `_seal_ceiling` existed -- this is the other place `_place`'s old
+        # bare `duration - 40` ceiling used to leak through.
+        ceiling = self._seal_ceiling()
         for _ in range(200):
             moved = False
             for earlier, later in zip(placed, placed[1:]):

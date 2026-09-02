@@ -18,6 +18,7 @@ RENDER_JS = STATION_DIR / "render.js"
 
 ASSETS_DIR = ROOT / "assets"
 PORTRAITS_DIR = ASSETS_DIR / "portraits"
+SFX_DIR = ASSETS_DIR / "sfx"
 
 #: Overridable so a container can mount the bank elsewhere, and so tests can
 #: run against a throwaway bank without touching the real one.

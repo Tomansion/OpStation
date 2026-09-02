@@ -3,9 +3,11 @@
 
 import { api, connect, fmt } from '../lib/api.js';
 import { closeModal, isOpen, showItem, shake } from '../lib/modal.js';
+import * as sfx from '../lib/sfx.js';
 import { mountStation, stationData } from '../lib/station.js';
 
-export async function game(root, { navigate, audio, params }) {
+export async function game(root, { navigate, params }) {
+  sfx.preload();
   const sessionId = params[0];
   const [station, config] = await Promise.all([stationData(), api.config()]);
 
@@ -64,7 +66,6 @@ export async function game(root, { navigate, audio, params }) {
   const ctx = {
     scenarioId: snapshot.scenario_id,
     dontKnow: config.dont_know,
-    audioContext: audio.context,
     onAcknowledge: uid => socket.send({ type: 'acknowledge', uid }),
     onAnswer: (uid, option_id) => socket.send({ type: 'answer_challenge', uid, option_id }),
   };
@@ -75,6 +76,7 @@ export async function game(root, { navigate, audio, params }) {
 
   const socket = connect(sessionId, payload => {
     if (payload.type === 'shake') { shake(); return; }
+    if (payload.type === 'confirmed') { showConfirmation(payload.text); return; }
     if (payload.type === 'opened' || payload.type === 'answered') return; // state follows
     if (payload.type === 'error') {
       el.hint.textContent = payload.message;
@@ -84,12 +86,28 @@ export async function game(root, { navigate, audio, params }) {
     render();
   });
 
+  // Set on the first render so the very first snapshot never fires a door or
+  // notification cue for state the player did not just cause.
+  let knownDoors = null;
+  let knownWaiting = null;
+
   function render() {
-    view.setDoorStates(state.doors || {});
+    const doors = state.doors || {};
+    if (knownDoors) {
+      for (const [id, next] of Object.entries(doors)) {
+        if (knownDoors[id] && knownDoors[id] !== next) {
+          sfx.play(next === 'open' ? 'door_open' : 'door_close', { volume: 0.5 });
+        }
+      }
+    }
+    knownDoors = doors;
+    view.setDoorStates(doors);
     el.penalties.textContent = state.penalties ?? 0;
     el.penalties.className = 'v' + (state.penalties ? ' bad' : '');
 
     const waiting = state.pending_count || 0;
+    if (knownWaiting !== null && waiting > knownWaiting) sfx.play('notification', { volume: 0.6 });
+    knownWaiting = waiting;
     const front = state.front;
     el.notify.disabled = waiting === 0;
     el.notify.className = waiting ? 'waiting' : '';
@@ -133,4 +151,19 @@ export async function game(root, { navigate, audio, params }) {
 
   render();
   return () => { clearInterval(timer); socket.close(); closeModal(); };
+}
+
+/* A quiet, non-blocking confirmation for an instruction the player already
+ * carried out right away -- unlike everything else in the queue, this does
+ * not need acknowledging and does not compete with real traffic. */
+function showConfirmation(text) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = `CONFIRMED — ${text}`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 400);
+  }, 2600);
 }

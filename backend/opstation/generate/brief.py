@@ -105,10 +105,24 @@ one penalty is applied. Tasks that express one obligation share a group; when
 one fails the rest of the group is cancelled, so one mistake costs exactly one
 penalty.
 
+`fail_message` IS that notice, delivered to the player verbatim -- nothing is
+generated at the moment of failure, so write it as the full reason a report
+would give: who asked, for which door and state, why, and what went wrong. Not
+an alarm code. "Foreman Voss asked for H5 held closed while Epsilon was vented.
+It was opened before he cleared it." -- not "PRESSURE ALARM: H5 open."
+
 NEVER write an instruction that asks for something already true. D4, D5, D7, D9
 and D12 start OPEN; every other door starts CLOSED. "Close D3 now" is invalid,
 because D3 is already closed. Asking to HOLD an already-correct state is fine
 and good -- that is the tempting-request pattern.
+
+DOOR-STATE PHRASING must match what the player already sees on the map. If the
+door has to CHANGE state: "Open D3." / "Close D10." If it has to STAY as it
+already is: "Keep D12 open for two minutes." / "Do not close D5 yet." / "Hold
+D7 open while the crew crosses." Never phrase an already-true state as an
+instruction to change it: D12 starts open, so "Open D12" reads as a
+contradiction the moment the player checks the door -- "Keep D12 open" is what
+you mean.
 
 A RETRACTION withdraws an obligation: a message with `cancels`. It takes effect
 on delivery. It must have teeth -- something later must depend on the player
@@ -126,18 +140,44 @@ Session length: {duration} s. Phases, as fractions of that:
 Volumes: {vol['messages_min']}-{vol['messages_max']} messages, at least {vol['threads_min']} incident threads of which
 EXACTLY ONE is finale-grade, plus {vol['everyday_exchanges_min']}-{vol['everyday_exchanges_max']} short everyday exchanges.
 
-Six actors, one person per type, the same person all session:
-  security      patrols, EVA, inspections, lockdowns
-  construction  extension work, exterior operations
-  cargo         transfers, storage, low-priority traffic
-  medical       patient transport, quarantine
-  civilian      residents, researchers, routine requests
-  system        automated alerts and alarms (never a person)
+Six actors, one person per type, the same person all session. Give each a
+distinct, consistent voice -- the same person should sound like themselves in
+their fifth message as in their first:
+  security      clipped and procedural. States facts, gives orders, expects
+                compliance. Patrols, EVA, inspections, lockdowns.
+  construction  blunt and impatient. Focused on the job in front of them,
+                short on courtesy when the work is waiting. Extension work,
+                exterior operations.
+  cargo         casual and transactional. Treats a door like a tool, not an
+                event; mentions schedules and loads. Transfers, storage,
+                low-priority traffic.
+  medical       careful and exact, especially about time -- states durations
+                and conditions precisely because a patient's safety depends on
+                it. Patient transport, quarantine.
+  civilian      informal, sometimes anxious or apologetic. Explains their own
+                situation because they have no authority to just ask.
+                Residents, researchers, routine requests.
+  system        flat and automated. No opinions, no courtesy words, states the
+                alarm and the required state and nothing else. Never a person.
 
-WRITING. Radio-terse, in character, English. Nobody explains the rules. An actor
-says what they need and why it matters to them. Prose names doors as D7 / H5 and
-places by the exact phrases in the layout brief. Do not invent rooms, decks,
-sectors or door numbers.
+WRITING. Most instructions are one or two short sentences: what you need, and,
+if the first sentence was dense, the door and the duration said again in
+different words -- not copy-pasted, a second phrasing, as insurance against
+being heard only once. A reason is welcome when it is cheap: "Close D10, we're
+venting the corridor" already carries one in four words and needs nothing more
+added to it. The session has a fixed length and a real reading budget, so add
+words only where they earn their place -- a third sentence is the exception,
+not the rule. A short status update or a plain acknowledgement is one sentence,
+plainly. Nobody explains the game's rules, but everybody explains their own
+actions when it costs nothing to. Prose names doors as D7 / H5 and places by
+the exact phrases in the layout brief. Do not invent rooms, decks, sectors or
+door numbers.
+
+A MESSAGE IS NEVER A QUESTION. Nothing in a message can be answered -- only a
+Keeper challenge has a reply. "Is the reactor corridor still off-limits?" sent
+as ordinary chatter dead-ends: the player cannot respond and nothing resolves
+it. Say it as a report instead: "Reactor corridor is still off-limits, last I
+heard." If something truly needs an answer, that is what a challenge is for.
 
 PLAIN ENGLISH, AND THIS MATTERS MORE THAN STYLE. Most players will not be native
 speakers, and a spoken message is heard once with no transcript. So:
@@ -152,6 +192,7 @@ speakers, and a spoken message is heard once with no transcript. So:
     impatient -- that is character. Nothing needs to be funny.
   * Say the door name early in the sentence, and say it once.
 
-Terse and plain are not in tension. "Door Control, Cargo. Open D12 for two
-minutes, then close it." is both.
+Terse, plain and a little explained are not in tension. "Door Control, Cargo.
+Pallet run through D10, two minutes. Need it open for the crossing, then
+closed straight after so the corridor stays sealed." is all three.
 """.strip()

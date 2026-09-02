@@ -144,6 +144,12 @@ state on a door the retraction freed, so that a player who still believes the ol
 restriction refuses and gets it wrong. A retraction with no consequence is
 decoration.
 
+Whichever style, restate enough of the original instruction that the player does
+not have to guess what is being lifted -- the door, and ideally the reason it
+was closed in the first place. "Forget what I said about D3" is weaker than
+"Forget what I said about holding D3 closed for the leak inspection -- that is
+over now." A bare "forget what I told you" with nothing else is not answerable.
+
 Choose the style by how much work the player has to do:
   explicit        names the door and the action outright
   self_reference  "forget what I told you earlier" — the player must recall
@@ -204,8 +210,14 @@ Reply with JSON:
                                            // NEVER more than {max_hold}.
           "delay": 0,                      // extra seconds before the window
                                            // opens, on top of reading time
-          "fail_message": "PRESSURE ALARM — Extension Epsilon vented into the
-                           service corridor. H5 was open."
+          "fail_message": "Foreman Voss ordered H5 held closed while Epsilon
+                           was vented, to keep the corridor sealed. It was
+                           opened before he cleared it."
+                                           // the full report: who asked, for
+                                           // what door and state, why, and
+                                           // what went wrong -- delivered to
+                                           // the player exactly as written,
+                                           // word for word, if this fails
         }}
       ]
     }}
@@ -272,8 +284,9 @@ Reply with JSON:
         {{
           "key": "ev1b1", "phase": 2, "actor": "cargo", "channel": "text",
           "kind": "instruction", "creates": "og_ev1",
-          "text": "Door Control, Cargo. Pallet run to Storage, two minutes. Need
-                   D12 open for the crossing, then closed behind us.",
+          "text": "Door Control, Cargo. Pallet run to Storage, two minutes.
+                   Keep D12 open for the crossing, then close it behind us
+                   once we're through.",
           "tasks": [
             {{"require": {{"D12": "open"}}, "hold": 90, "delay": 30,
              "fail_message": "The pallet run was blocked at D12."}},
@@ -286,10 +299,22 @@ Reply with JSON:
   ]
 }}
 
-Spread them across phases 1 to 5, weighted toward 4 and 5 where the load is
-highest. Use every actor type at least twice across the set. Vary the doors:
-touch D1, D2, D3, D5, D6, D8, D11, D13 and the hangar doors, not only the
-service corridor.
+At least HALF of these exchanges must be tagged phase 4 or 5. The second half of
+the shift needs traffic as much as the first does -- the pressure is supposed to
+build, not taper off once the incident threads have said their piece. A few
+should carry NO obligation and NO `cancels` at all: a single beat of pure
+chatter or a status remark with nothing riding on it -- a passing comment about
+a place, a bit of station gossip, someone noting a door reads correctly on
+their own panel. That is what makes the quiet stretches between real
+obligations feel inhabited rather than empty. Do NOT write a "stand down" or
+"closing this out" message here -- that is a retraction, and retractions are
+handled in a separate stage. An everyday exchange's second beat, if it has one,
+is a plain follow-up with its own task (see the `D10` example above), never a
+message that cancels the first beat's obligation.
+
+Use every actor type at least twice across the set. Vary the doors: touch D1,
+D2, D3, D5, D6, D8, D11, D13 and the hangar doors, not only the service
+corridor.
 
 Watch the starting state: D4, D5, D7, D9 and D12 start OPEN, everything else
 CLOSED. "Open D5 for me" is invalid — D5 is already open. "Hold D5 closed while
@@ -441,7 +466,14 @@ HARD RULES
   real actor, a real door, a real reason. And it must be FALSE at the moment the
   question is asked. Generic filler like "routine maintenance" is not acceptable.
 - `depends_on` must list the message ids the answer rests on, and every one of
-  them must arrive before the question.
+  them must arrive before the question. Message ids are for `depends_on` ONLY —
+  never write one into `prompt`, `explanation` or an option's `text`. The player
+  has never seen an id; say what happened in prose ("Construction asked for it
+  at 04:05", not "see m_012").
+- The whole shift lasts under half an hour, and no obligation holds for more
+  than a few minutes. A "time" question's answer is always in MINUTES or
+  SECONDS — never hours. An option measured in hours is wrong on its face and
+  will be rejected.
 - One question must be about a thread that has been silent for several minutes
   while still holding an obligation. The debrief questions should reach back
   furthest, including threads not heard from in ten minutes or more."""
@@ -453,7 +485,7 @@ HARD RULES
 #: Rules whose only possible fix is rewriting prose. Everything else the
 #: validator can complain about is arithmetic or structure, and is repaired
 #: deterministically without spending a call.
-TEXT_RULES = frozenset({"V19", "V25", "V27", "V28", "V32", "V35"})
+TEXT_RULES = frozenset({"V19", "V25", "V27", "V28", "V32", "V35", "V36", "V37", "V38"})
 
 
 def rewrite_prompt(
@@ -488,11 +520,18 @@ Reminders that cover most of these errors:
 - Only doors D1-D13 and H1-H5 exist. Only the places in the layout brief exist.
   No invented decks, sectors, bays or door numbers.
 - A message that withdraws an instruction must make clear WHICH instruction, by
-  naming the door, the place, or the subject.
+  naming the door, the place, or the subject, and should remind the player why
+  it was asked for in the first place.
 - A retraction that names another actor's instruction must name that actor.
 - Every distractor must come from another real thread in this session, name a
   real actor, door or place, and be false at the moment the question is asked.
 - Exactly four options, exactly one correct, and never author "I don't know".
+- A "time" answer is in minutes or seconds — the whole shift is under half an
+  hour, so an hour-scale answer is always wrong.
+- Never write an internal id (m_012, t_045, og_ext_vent) into anything a player
+  reads — describe what happened in prose instead.
+- A message is never a question — nothing outside a challenge can be answered.
+  Say it as a statement or a report.
 - Plain English. Short sentences, common words, no idioms, no slang, no jokes.
   Most players are not native speakers and a spoken message is heard once."""
     return SYSTEM, user
@@ -529,7 +568,11 @@ Write TWO messages.
 1. **The withdrawal.** {actor.title()} takes back the instruction that created
    that obligation. It must be clear WHICH instruction is being withdrawn — name
    the door, the place, or the subject — because the player has heard a great
-   deal by now and "forget what I said" is not answerable on its own.
+   deal by now and "forget what I said" is not answerable on its own. Restate
+   enough of the original obligation as a reminder, ideally including why it was
+   asked for in the first place: "the hold you were keeping on D3 for the leak
+   inspection is over" reminds the player what they are being released from,
+   rather than assuming they still remember the name of it.
 
 2. **The consequence.** Later, somebody needs that same door in the OPPOSITE
    state. This is what makes the withdrawal matter: a player who still believes

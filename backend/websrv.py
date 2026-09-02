@@ -22,7 +22,7 @@ from opstation.config import (
     voices,
 )
 from opstation import paths
-from opstation.paths import FRONTEND_DIR, PORTRAITS_DIR, RENDER_JS, STATION_FILE
+from opstation.paths import FRONTEND_DIR, PORTRAITS_DIR, RENDER_JS, SFX_DIR, STATION_FILE
 from opstation.session import SessionManager
 from opstation.station import station as load_station
 
@@ -397,8 +397,8 @@ async def admin_generate(payload: dict) -> dict:
     }
 
     async def work() -> None:
-        from .opstation.generate.pipeline import Generator, publish
-        from .opstation.generate.tts import render_scenario
+        from opstation.generate.pipeline import Generator, publish
+        from opstation.generate.tts import render_scenario
 
         def progress(stage: str, message: str) -> None:
             _jobs[job_id]["progress"].append({"stage": stage, "message": message})
@@ -417,8 +417,8 @@ async def admin_generate(payload: dict) -> dict:
             if result.ok and payload.get("render_audio", True):
                 progress("tts", "rendering audio")
                 await asyncio.to_thread(render_scenario, result.scenario, directory)
-                from .opstation.generate.repair import reflow_for_audio
-                from .opstation.validator import validate as _validate
+                from opstation.generate.repair import reflow_for_audio
+                from opstation.validator import validate as _validate
 
                 for line in reflow_for_audio(result.scenario):
                     progress("reflow", line)
@@ -461,6 +461,9 @@ if PORTRAITS_DIR.exists():
     app.mount(
         "/assets/portraits", StaticFiles(directory=PORTRAITS_DIR), name="portraits"
     )
+
+if SFX_DIR.exists():
+    app.mount("/assets/sfx", StaticFiles(directory=SFX_DIR), name="sfx")
 
 
 @app.get("/healthz", response_class=PlainTextResponse)

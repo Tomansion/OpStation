@@ -354,3 +354,82 @@ def test_a_cross_actor_withdrawal_is_attributed():
     # Nothing to attribute: left alone rather than mangled.
     assert _attribute_to("Stand down on the vent hold.", "cargo") == \
         "Stand down on the vent hold."
+
+
+def test_a_message_cannot_ask_a_question():
+    """V36: only a challenge has a reply interface. A message that ends in a
+    question mark dead-ends -- the player has no way to answer it."""
+    sc = make_scenario(messages=[
+        dict(id="m_1", at=100, thread_id="th_a", actor_id="a_civilian", channel="radio",
+             kind="chatter", text="Morrow here. Is the reactor corridor still off-limits?"),
+    ])
+    assert "V36" in rules_fired(sc)
+
+
+def test_a_declarative_status_message_passes_v36():
+    sc = make_scenario(messages=[
+        dict(id="m_1", at=100, thread_id="th_a", actor_id="a_civilian", channel="radio",
+             kind="chatter", text="Morrow here. Reactor corridor still reads off-limits."),
+    ])
+    assert "V36" not in rules_fired(sc)
+
+
+def test_an_internal_id_leaking_into_prose_is_rejected():
+    """V37: m_012, og_ext_vent and friends are bookkeeping. The player has never
+    seen one, and a challenge's explanation is exactly where the model is
+    tempted to cite one instead of describing what happened."""
+    sc = make_scenario(challenges=[dict(
+        id="q_1", at=900, slot="in_session", kind="provenance", thread_id="th_a",
+        actor_id="a_security", channel="text", pretext="Writing the report.",
+        prompt="Who authorised that door?",
+        options=[dict(id="o1", text="Construction, for the vent crew.", correct=True),
+                 dict(id="o2", text="Medical, for a transfer."),
+                 dict(id="o3", text="Cargo, for a pallet run."),
+                 dict(id="o4", text="Security, on patrol.")],
+        explanation="See m_012 — Construction asked for it.", depends_on=["m_1"],
+    )])
+    assert "V37" in rules_fired(sc)
+
+
+def test_prose_describing_events_passes_v37():
+    sc = make_scenario(challenges=[dict(
+        id="q_1", at=900, slot="in_session", kind="provenance", thread_id="th_a",
+        actor_id="a_security", channel="text", pretext="Writing the report.",
+        prompt="Who authorised that door?",
+        options=[dict(id="o1", text="Construction, for the vent crew.", correct=True),
+                 dict(id="o2", text="Medical, for a transfer."),
+                 dict(id="o3", text="Cargo, for a pallet run."),
+                 dict(id="o4", text="Security, on patrol.")],
+        explanation="Construction asked for it at 04:05.", depends_on=["m_1"],
+    )])
+    assert "V37" not in rules_fired(sc)
+
+
+def test_a_correct_time_answer_in_hours_is_rejected():
+    """V38: the whole shift lasts under half an hour, so a correct answer
+    measured in hours cannot be what actually happened."""
+    sc = make_scenario(challenges=[dict(
+        id="q_1", at=900, slot="in_session", kind="time", thread_id="th_a",
+        actor_id="a_medical", channel="text", pretext="Writing the report.",
+        prompt="How long was the north sector sealed after the gas leak?",
+        options=[dict(id="o1", text="Eight hours.", correct=True),
+                 dict(id="o2", text="Two hours."), dict(id="o3", text="Four hours."),
+                 dict(id="o4", text="Twelve hours.")],
+        explanation="Eight hours, from the leak to the all-clear.", depends_on=["m_1"],
+    )])
+    assert "V38" in rules_fired(sc)
+
+
+def test_an_implausible_hours_distractor_does_not_trip_v38():
+    """A wrong option is allowed to name hours on purpose, as an order-of-
+    magnitude decoy (V19) -- only the correct answer is checked."""
+    sc = make_scenario(challenges=[dict(
+        id="q_1", at=900, slot="in_session", kind="time", thread_id="th_a",
+        actor_id="a_security", channel="text", pretext="Writing the report.",
+        prompt="How long was the Medical Bay sealed?",
+        options=[dict(id="o1", text="Five minutes.", correct=True),
+                 dict(id="o2", text="Twelve hours."), dict(id="o3", text="Two days."),
+                 dict(id="o4", text="Thirty seconds.")],
+        explanation="Five minutes, from 00:03.", depends_on=["m_1"],
+    )])
+    assert "V38" not in rules_fired(sc)

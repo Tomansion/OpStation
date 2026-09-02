@@ -7,9 +7,23 @@
  *     and the clock never stops.
  */
 
+import * as sfx from './sfx.js';
+
 let veil = null;
+//: Every sound and timer started while a modal is open, so closing it --
+//: whether the player acknowledges, or the next item simply replaces it --
+//: always leaves nothing playing behind it. Radio is audio-only and heard
+//: once; a background loop that outlives its modal would quietly break that.
+let tracked = [];
+
+function track(stoppable) {
+  tracked.push(stoppable);
+  return stoppable;
+}
 
 export function closeModal() {
+  for (const t of tracked) { try { t.stop(); } catch { /* already stopped */ } }
+  tracked = [];
   if (veil) { veil.remove(); veil = null; }
 }
 
@@ -69,16 +83,33 @@ function onKey(ev) {
   if (ev.key === 'Escape') { ev.preventDefault(); shake(); }
 }
 
+//: Bars for the radio "speaking" animation. Pure CSS keyframes, toggled with a
+//: class -- guaranteed to animate on every browser, unlike a Web Audio
+//: analyser, which can silently fail to hook up and leave the panel looking
+//: dead while the audio plays fine.
+const WAVE_BARS = 14;
+
+function barsHtml() {
+  let out = '';
+  for (let i = 0; i < WAVE_BARS; i++) {
+    const duration = (0.55 + Math.random() * 0.5).toFixed(2);
+    const delay = (Math.random() * 0.4).toFixed(2);
+    out += `<span style="animation-duration:${duration}s;animation-delay:${delay}s"></span>`;
+  }
+  return out;
+}
+
 function renderMessage(item, ctx, body, foot) {
   if (item.channel === 'radio') {
     body.innerHTML = `
       <div class="radio">
-        <canvas data-wave width="600" height="64"></canvas>
+        <div class="bars" data-bars>${barsHtml()}</div>
         <div class="state" data-state>OPENING CHANNEL</div>
       </div>`;
     playRadio(item, ctx, body);
   } else {
-    body.textContent = item.text || '';
+    body.textContent = '';
+    typeText(body, item.text || '');
   }
   const ack = document.createElement('button');
   ack.className = 'primary';
@@ -87,103 +118,90 @@ function renderMessage(item, ctx, body, foot) {
   foot.appendChild(ack);
 }
 
+//: Milliseconds per character of the on-screen typewriter effect.
+const TYPE_SPEED_MS = 16;
+
+/* Text messages are received character by character rather than dumped on
+ * screen whole, with a soft typing clatter under it -- a text order arriving
+ * has its own sense of "coming in live", the same way radio does. */
+function typeText(body, text) {
+  if (!text) return;
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  body.appendChild(caret);
+  if (!text.trim()) { caret.remove(); return; }
+
+  const writing = track(sfx.loop('writing', { volume: 0.4, fadeInSeconds: 0.3 }));
+  let i = 0;
+  const timer = setInterval(() => {
+    if (!veil || !veil.contains(body)) { clearInterval(timer); writing.stop(); return; }
+    caret.before(document.createTextNode(text[i]));
+    i += 1;
+    if (i >= text.length) {
+      clearInterval(timer);
+      writing.fadeOut(0.25);
+      caret.remove();
+      sfx.play('radio_end', { volume: 0.5 });
+    }
+  }, TYPE_SPEED_MS);
+  track({ stop: () => clearInterval(timer) });
+}
+
 /* Audio only, played once. A reconnect returns the modal to the queue but the
- * server has already marked the audio spent, so it cannot be heard twice. */
+ * server has already marked the audio spent, so it cannot be heard twice.
+ * Bookended by a channel-open and channel-close cue, with quiet static
+ * underneath the voice -- three separate assets, sequenced rather than mixed
+ * blind, so the words are never competing with the effects. */
 function playRadio(item, ctx, body) {
-  const canvas = body.querySelector('[data-wave]');
+  const bars = body.querySelector('[data-bars]');
   const state = body.querySelector('[data-state]');
   const total = item.audio_duration ? `${item.audio_duration.toFixed(1)}s` : '';
 
   if (!item.audio) {
     state.textContent = 'AUDIO UNAVAILABLE — THIS SESSION IS VOID';
-    drawIdle(canvas);
     return;
   }
   if (item.audio_played) {
     state.textContent = `TRANSMISSION ENDED — ${total}`;
     state.classList.add('done');
-    drawIdle(canvas);
     return;
   }
 
-  // Draw something before the first animation frame, so the panel is never a
-  // blank box while the audio is still loading.
-  drawIdle(canvas);
-  state.textContent = total ? `RECEIVING — ${total}` : 'RECEIVING';
+  const noise = track(sfx.loop('radio_noise', {
+    volume: 0.06, fadeInSeconds: 0.6, randomStart: true,
+  }));
 
-  const audio = new Audio(`/api/scenarios/${ctx.scenarioId}/${item.audio}`);
-  let analyser = null;
-  try {
-    const ac = ctx.audioContext;
-    const source = ac.createMediaElementSource(audio);
-    analyser = ac.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    analyser.connect(ac.destination);
-  } catch {
-    // No analyser: the audio still plays, the bars just do not react to it.
-  }
+  let started = false;
+  const beginVoice = () => {
+    if (started) return;
+    started = true;
+    if (!veil || !veil.contains(body)) { noise.stop(); return; }
 
-  audio.play().catch(() => {
-    state.textContent = 'AUDIO BLOCKED — THIS SESSION IS VOID';
-  });
-  audio.onended = () => {
-    state.textContent = `TRANSMISSION ENDED — ${total}`;
-    state.classList.add('done');
+    bars.classList.add('playing');
+    state.textContent = total ? `RECEIVING — ${total}` : 'RECEIVING';
+
+    const audio = new Audio(`/api/scenarios/${ctx.scenarioId}/${item.audio}`);
+    track({ stop: () => audio.pause() });
+    audio.play().catch(() => {
+      state.textContent = 'AUDIO BLOCKED — THIS SESSION IS VOID';
+    });
+    audio.ontimeupdate = () => {
+      if (total) state.textContent = `RECEIVING — ${audio.currentTime.toFixed(1)}s / ${total}`;
+    };
+    audio.onended = () => {
+      bars.classList.remove('playing');
+      state.textContent = `TRANSMISSION ENDED — ${total}`;
+      state.classList.add('done');
+      noise.fadeOut(0.5);
+      sfx.play('radio_end', { volume: 0.6 });
+    };
   };
 
-  const bins = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
-  (function frame() {
-    if (!veil || !veil.contains(canvas)) return;
-    if (!audio.ended) {
-      const played = audio.currentTime || 0;
-      state.textContent = `RECEIVING — ${played.toFixed(1)}s / ${total}`;
-      if (analyser) { analyser.getByteFrequencyData(bins); drawWave(canvas, bins); }
-      else drawBusy(canvas, played);
-    }
-    requestAnimationFrame(frame);
-  })();
-}
-
-function drawWave(canvas, bins) {
-  const ctx = canvas.getContext('2d');
-  const { width: w, height: h } = canvas;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#00e5ff';
-  const bars = 48;
-  const bw = w / bars;
-  for (let i = 0; i < bars; i++) {
-    const v = bins[Math.floor((i / bars) * bins.length)] / 255;
-    const bh = Math.max(2, v * (h - 6));
-    ctx.fillRect(i * bw + 1, (h - bh) / 2, bw - 2, bh);
-  }
-}
-
-/* A dead channel: a baseline with tick marks, so the panel never looks broken. */
-function drawIdle(canvas) {
-  const ctx = canvas.getContext('2d');
-  const { width: w, height: h } = canvas;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#2a2e30';
-  ctx.fillRect(0, h / 2 - 1, w, 2);
-  for (let x = 0; x < w; x += 24) ctx.fillRect(x, h / 2 - 4, 1, 8);
-}
-
-/* Fallback when no analyser is available: bars that move with the clock, so the
- * player can see the transmission is running without it pretending to be a
- * reading of the actual audio. */
-function drawBusy(canvas, seconds) {
-  const ctx = canvas.getContext('2d');
-  const { width: w, height: h } = canvas;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#00e5ff';
-  const bars = 48;
-  const bw = w / bars;
-  for (let i = 0; i < bars; i++) {
-    const v = 0.35 + 0.3 * Math.sin(seconds * 6 + i * 0.7) + 0.2 * Math.sin(i * 2.3);
-    const bh = Math.max(2, Math.abs(v) * (h - 8));
-    ctx.fillRect(i * bw + 1, (h - bh) / 2, bw - 2, bh);
-  }
+  const startCue = track(sfx.play('radio_start', { volume: 0.6 }));
+  startCue.node.addEventListener('ended', beginVoice, { once: true });
+  // Belt and braces: if the cue is blocked or its duration is unreliable, the
+  // voice still has to start.
+  setTimeout(beginVoice, 1800);
 }
 
 function renderChallenge(item, ctx, body, foot) {

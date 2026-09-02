@@ -1,7 +1,7 @@
 {
   "_comment": "Everything that shapes pressure. Loaded at startup, shown on the admin page, and read by the scenario generator so a scenario is generated against the tunables it will be played with. Changing any key marked (validator) invalidates existing scenarios.",
   "tick_ms": 250,
-  "tts_sentence_gap_seconds": 1.0,
+  "tts_sentence_gap_seconds": 0.6,
   "tts_door_pause_seconds": 0.25,
   "tts_door_length_scale": 1.3,
   "failure_notice_cooldown_seconds": 30,

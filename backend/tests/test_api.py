@@ -83,7 +83,7 @@ def build_fixture(root, station) -> Scenario:
 def client(tmp_path, station, monkeypatch):
     paths.use_data_dir(tmp_path)
     build_fixture(tmp_path, station)
-    from backend.websrv import app
+    from websrv import app
 
     with TestClient(app) as test_client:
         yield test_client

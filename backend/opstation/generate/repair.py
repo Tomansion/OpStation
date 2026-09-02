@@ -23,6 +23,7 @@ def repair(scenario: Scenario, report: Report, station: Station) -> list[str]:
     for finding in report.errors:
         by_rule.setdefault(finding.rule, []).append(finding)
 
+    log += _fix_speaker_mismatch(scenario, by_rule.get("V6", []))
     log += _drop_free_pass_tasks(scenario, by_rule.get("V15", []))
     log += _drop_redundant_tasks(scenario, by_rule.get("V16", []))
     log += _fix_derived_requires(scenario, station)
@@ -30,7 +31,129 @@ def repair(scenario: Scenario, report: Report, station: Station) -> list[str]:
     log += _drop_dead_cancels(scenario, by_rule.get("V26", []))
     log += _fix_challenge_dependencies(scenario)
     log += _demote_toothless_retractions(scenario, by_rule.get("V29", []))
+    log += _trim_excess_retractions(scenario, by_rule.get("V30", []))
+    log += _fix_message_spacing(scenario, by_rule.get("V9", []))
     log += _renumber(scenario)
+    return log
+
+
+def _trim_excess_retractions(scenario: Scenario, findings) -> list[str]:
+    """V30: at most `retractions_max`.
+
+    The scheduler deliberately attempts one more retraction than the quota
+    (schedule.py's `_place_retractions`), because a retraction it selects can
+    still be lost later to a room or stranding problem -- so on a run where
+    nothing is lost, one too many survives. A retraction over quota is not
+    defective (V29 would already have caught a toothless one), so this is a
+    plain count trim, not a quality judgement: the most recently scheduled
+    ones give way first, since an earlier retraction has had more session time
+    to matter to the player.
+    """
+    if not findings:
+        return []
+    from ..config import difficulty as load_difficulty
+
+    quota = int(load_difficulty().volumes["retractions_max"])
+    retractions = sorted(scenario.retractions(), key=lambda m: m.at, reverse=True)
+    over = len(retractions) - quota
+    if over <= 0:
+        return []
+    log: list[str] = []
+    for message in retractions[:over]:
+        message.kind = "status"
+        message.cancels = []
+        message.retraction_style = None
+        log.append(f"V30: {message.id} was over the quota of {quota} retractions — demoted to status")
+    return log
+
+
+def _fix_speaker_mismatch(scenario: Scenario, findings) -> list[str]:
+    """V6: a voice is the only cue that identifies a speaker, so the actor
+    playing a message must agree with who it introduces itself as.
+
+    `align_speakers` already does this at generation time; this is the same
+    check, run again as a repair for the cases it misses -- reassigning
+    `actor_id` to whichever actor the text actually names, mirroring exactly
+    what the validator itself checked to raise the finding.
+    """
+    if not findings:
+        return []
+    ids = {f.where for f in findings if f.where}
+    log: list[str] = []
+    for message_id in ids:
+        msg = scenario.messages_by_id.get(message_id)
+        if msg is None:
+            continue
+        opening = msg.text[:48].lower()
+        named = [
+            a for a in scenario.actors
+            if a.id != msg.actor_id
+            and (a.name.split()[-1].lower() in opening or a.type in opening)
+        ]
+        if not named:
+            continue
+        msg.actor_id = named[0].id
+        log.append(
+            f"V6: {msg.id} reassigned to {named[0].type} — the text names them, not "
+            "the original speaker"
+        )
+    return log
+
+
+def _fix_message_spacing(scenario: Scenario, findings) -> list[str]:
+    """V9: no two messages closer than the minimum gap.
+
+    Pure arithmetic, so it belongs here rather than in an LLM repair round. The
+    earlier message retreats when there is room -- that only ever gives its own
+    tasks more reading slack, never less (V7). Only when there is no room to
+    retreat does the later message advance instead, taking its own tasks with
+    it so their reading slack does not shrink either.
+    """
+    if not findings:
+        return []
+    from ..config import difficulty as load_difficulty
+
+    gap = int(load_difficulty()["min_message_gap_seconds"])
+    tail = 5
+    log: list[str] = []
+    by_message: dict[str, list] = {}
+    for task in scenario.tasks:
+        by_message.setdefault(task.message_id, []).append(task)
+
+    for _ in range(50):
+        ordered = sorted(scenario.messages, key=lambda m: (m.at, m.id))
+        violation = next(
+            ((a, b) for a, b in zip(ordered, ordered[1:]) if b.at - a.at < gap), None
+        )
+        if violation is None:
+            break
+        earlier, later = violation
+        shortfall = gap - (later.at - earlier.at)
+        idx = ordered.index(earlier)
+        before = ordered[idx - 1] if idx > 0 else None
+        if earlier.at - shortfall >= 0 and (
+            before is None or earlier.at - shortfall - before.at >= gap
+        ):
+            log.append(
+                f"V9: {earlier.id} moved {earlier.at}s -> {earlier.at - shortfall}s, was "
+                f"only {later.at - earlier.at}s before {later.id}"
+            )
+            earlier.at -= shortfall
+            continue
+        new_at = later.at + shortfall
+        if new_at > scenario.duration_seconds - tail:
+            log.append(
+                f"V9: {later.id} is only {later.at - earlier.at}s after {earlier.id} and "
+                "there is no room left to separate them"
+            )
+            break
+        log.append(
+            f"V9: {later.id} moved {later.at}s -> {new_at}s, was only "
+            f"{later.at - earlier.at}s after {earlier.id}"
+        )
+        later.at = new_at
+        for task in by_message.get(later.id, []):
+            task.at += shortfall
     return log
 
 
@@ -60,7 +183,27 @@ def _fix_challenge_dependencies(scenario: Scenario) -> list[str]:
             return False
         return all(abs(at - other) >= 125 for other in others)
 
-    for challenge in scenario.challenges:
+    group_ids = {g.id for g in scenario.task_groups}
+    for challenge in scenario.all_challenges:
+        # A dependency that resolves to nothing at all is not a timing problem
+        # -- there is no message to move the question after. This happens when
+        # something the challenge cited got dropped elsewhere in repair (a task
+        # trimmed for room, a beat that never fit). Rewriting prose cannot fix a
+        # reference to a message that no longer exists, so the stale reference
+        # is dropped instead; `depends_on` may legally end up empty (V19 warns,
+        # it does not block).
+        unresolved = [d for d in challenge.depends_on if d not in by_id and d not in group_ids]
+        if unresolved:
+            challenge.depends_on = [d for d in challenge.depends_on if d not in unresolved]
+            log.append(
+                f"V19: {challenge.id} depends_on {unresolved} resolves to nothing that "
+                "still exists — dropped"
+            )
+        if challenge.slot != "in_session":
+            # Only in-session challenges have a real `at` to move the timing
+            # check against; a debrief question is untimed and answered after
+            # everything has already happened.
+            continue
         needed = [by_id[d].at for d in challenge.depends_on if d in by_id]
         latest = max(needed, default=None)
         if latest is None or latest < challenge.at:
