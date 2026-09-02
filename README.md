@@ -27,8 +27,7 @@ make generate ARGS="--finale invasion"   # writes into data/scenarios/
 Or in Docker:
 
 ```sh
-docker compose up app
-docker compose run --rm generator --finale hull_breach
+docker compose up app   # play on http://localhost:3000, generate from /admin
 ```
 
 ## What is here

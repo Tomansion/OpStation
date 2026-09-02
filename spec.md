@@ -1004,20 +1004,19 @@ Speech rendering serves the same goal from the other side (§12.1 step 4): a pau
 
 - **Backend:** Python 3.12 + FastAPI. WebSockets for the live session. Server-authoritative clock and game loop.
 - **LLM:** LiteLLM, provider-agnostic, generation-time only.
-- **TTS:** **Piper**, local and offline, inside the generation image. Six pinned voice models, one per actor type — see [`config/voices.json`](config/voices.json) and §11.2. Rendered at generation time into the scenario folder, with the `system` voice passed through an intercom filter. Wrapped behind a small `TextToSpeech` interface so a cloud provider can be swapped in later without touching the pipeline.
+- **TTS:** **Piper**, local and offline, generation-time only. Six pinned voice models, one per actor type — see [`config/voices.json`](config/voices.json) and §11.2. Rendered at generation time into the scenario folder, with the `system` voice passed through an intercom filter. Wrapped behind a small `TextToSpeech` interface so a cloud provider can be swapped in later without touching the pipeline.
 - **Frontend:** plain ES modules, no framework and no build step. Station rendered on an HTML `<canvas>` with hit-testing for door clicks, by the same [`station/render.js`](station/render.js) the dev preview and the printed handbook use. **This is a deliberate change from the Angular plan** — see §14.7.
 - **Storage:** flat files, no database server.
-- **Packaging:** Dockerfile per service plus a `docker-compose.yml`; README with local and Docker instructions.
+- **Packaging:** one Dockerfile plus a `docker-compose.yml`; README with local and Docker instructions.
 
 ### 14.2 Storage layout
 
 ```
 .env                    gitignored: the LLM key. Generation-time only.
 Makefile                venv, test, serve, generate, station, sheets, voices
-docker-compose.yml      two services: `app` plays, `generator` generates
+docker-compose.yml      one service: `app` plays and generates
 docker/
-  Dockerfile.app        thin: no model weights, no LLM client, no ffmpeg
-  Dockerfile.generator  LiteLLM, Piper, ffmpeg, the six pinned voices
+  Dockerfile.app        LiteLLM, Piper, ffmpeg, the six pinned voices
 config/
   difficulty.json       every value that shapes pressure
   voices.json           pinned Piper voice per actor type — append-only
