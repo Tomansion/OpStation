@@ -38,7 +38,7 @@ class TextToSpeech:
     """The interface the pipeline depends on, so a cloud provider can be swapped
     in later without touching anything else."""
 
-    def say(self, text: str, voice: str, dest: Path) -> float:
+    def say(self, text: str, voice: str, dest: Path, speaker_id: int | None = None) -> float:
         """Render `text` to `dest` and return its duration in seconds."""
         raise NotImplementedError
 
@@ -108,14 +108,15 @@ class PiperTTS(TextToSpeech):
             self._cache[voice] = PiperVoice.load(str(self.model_for(voice)))
         return self._cache[voice]
 
-    def _config(self, is_door: bool):
+    def _config(self, is_door: bool, speaker_id: int | None):
         from piper import SynthesisConfig
 
-        if not is_door or self.door_length_scale == 1.0:
+        length_scale = self.door_length_scale if is_door and self.door_length_scale != 1.0 else None
+        if length_scale is None and speaker_id is None:
             return None
-        return SynthesisConfig(length_scale=self.door_length_scale)
+        return SynthesisConfig(speaker_id=speaker_id, length_scale=length_scale)
 
-    def say(self, text: str, voice: str, dest: Path) -> float:
+    def say(self, text: str, voice: str, dest: Path, speaker_id: int | None = None) -> float:
         """Render one message: a pause between sentences, and the door names
         given weight.
 
@@ -141,7 +142,7 @@ class PiperTTS(TextToSpeech):
             if index:
                 rendered.append(_SILENCE)
             for fragment, is_door in split_doors(sentence):
-                chunks = list(loaded.synthesize(fragment, self._config(is_door)))
+                chunks = list(loaded.synthesize(fragment, self._config(is_door, speaker_id)))
                 if not chunks:
                     continue
                 spec = spec or chunks[0]
@@ -255,7 +256,7 @@ def render_scenario(
         door_pause_seconds=float(diff_now.get("tts_door_pause_seconds", 0.25)),
         door_length_scale=float(diff_now.get("tts_door_length_scale", 1.3)),
     )
-    voice_map = voices or load_voices()
+    voice_map = voices or load_voices(scenario.language)
     if not engine.available():
         raise TTSError(
             "no TTS engine available. `pip install piper-tts` and "
@@ -280,7 +281,7 @@ def render_scenario(
         if actor is None:
             continue
         dest = audio_dir / f"{item_id}.wav"
-        seconds = engine.say(text, actor.voice, dest)
+        seconds = engine.say(text, actor.voice, dest, speaker_id=actor.speaker)
         post = voice_map.post_filter_for(actor.type)
         if post:
             apply_filter(dest, voice_map.ffmpeg_filter(post))

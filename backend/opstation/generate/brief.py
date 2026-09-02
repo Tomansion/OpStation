@@ -9,6 +9,11 @@ from __future__ import annotations
 from ..config import Difficulty
 from ..station import Station, door_sort_key
 
+#: Generation is monolingual per scenario (spec 16): text and audio never mix
+#: languages within one session. Used to name the target language in the brief
+#: and to pick which plain-language block below applies.
+LANGUAGE_NAMES = {"en": "English", "fr": "French"}
+
 
 def station_brief(st: Station) -> str:
     lines: list[str] = [
@@ -81,11 +86,18 @@ def station_brief(st: Station) -> str:
     return "\n".join(lines)
 
 
-def rules_brief(diff: Difficulty, duration: int) -> str:
+def rules_brief(diff: Difficulty, duration: int, language: str = "en") -> str:
     vol = diff.volumes
+    language_line = (
+        "" if language == "en" else
+        f"\nWrite every piece of player-facing text -- messages, fail_message, "
+        f"challenge prompts, options and explanations, actor names -- in "
+        f"{LANGUAGE_NAMES[language]}. These instructions stay in English; only the "
+        f"game's own content changes language.\n"
+    )
     return f"""
 HOW THE GAME WORKS — read this before writing anything.
-
+{language_line}
 The player is the Door Control Operator. Their only actions are opening and
 closing doors, reading or hearing messages, and answering questions. The
 difficulty is MEMORY: there is no message history, no log, no replay, no pause.
@@ -179,7 +191,17 @@ as ordinary chatter dead-ends: the player cannot respond and nothing resolves
 it. Say it as a report instead: "Reactor corridor is still off-limits, last I
 heard." If something truly needs an answer, that is what a challenge is for.
 
-PLAIN ENGLISH, AND THIS MATTERS MORE THAN STYLE. Most players will not be native
+{_PLAIN_LANGUAGE[language]}
+""".strip()
+
+
+#: The plain-language block (spec 13.7) is the one part of the brief that has
+#: to change words, not just switch a header: its examples are idioms in the
+#: target language, and an idiom in English is invisible noise to a model
+#: asked to avoid idioms in French. Everything else in this file is an
+#: instruction *to* the model, so it stays in English regardless of language.
+_PLAIN_LANGUAGE = {
+    "en": """PLAIN ENGLISH, AND THIS MATTERS MORE THAN STYLE. Most players will not be native
 speakers, and a spoken message is heard once with no transcript. So:
 
   * Short sentences. One instruction per sentence. Under twenty words.
@@ -194,5 +216,25 @@ speakers, and a spoken message is heard once with no transcript. So:
 
 Terse, plain and a little explained are not in tension. "Door Control, Cargo.
 Pallet run through D10, two minutes. Need it open for the crossing, then
-closed straight after so the corridor stays sealed." is all three.
-""".strip()
+closed straight after so the corridor stays sealed." is all three.""",
+    "fr": """FRANÇAIS SIMPLE, ET CECI COMPTE PLUS QUE LE STYLE. La plupart des joueurs ne
+sont pas francophones natifs, et un message parlé n'est entendu qu'une seule
+fois, sans transcription. Donc :
+
+  * Phrases courtes. Une instruction par phrase. Moins de vingt mots.
+  * Mots courants. « Partir » plutôt que « quitter les lieux ». « Maintenant »
+    plutôt que « à l'heure actuelle ».
+  * AUCUNE expression idiomatique, AUCUNE figure de style. Pas « garder un œil
+    dessus », pas « on est dans le rouge », pas « le temps presse », pas « à
+    la dernière minute », pas « il était moins une ».
+  * AUCUN argot, aucun jargon inventé. Dis « minutes », jamais « mikes ». Dis
+    « immédiatement », jamais « dans la foulée ».
+  * AUCUNE blague, aucun jeu de mots, aucune ironie. Un acteur peut être sec,
+    inquiet ou impatient -- c'est du caractère. Rien n'a besoin d'être drôle.
+  * Nomme la porte tôt dans la phrase, et une seule fois.
+
+Concis, simple et un peu expliqué ne s'opposent pas. « Contrôle des portes,
+Fret. Passage par D10, deux minutes. Il me la faut ouverte pour la traversée,
+puis refermée aussitôt pour que le couloir reste isolé. » a les trois qualités
+à la fois.""",
+}

@@ -285,6 +285,27 @@ def test_idioms_and_slang_are_rejected():
     assert "V35" in rules_fired(sc)
 
 
+def test_french_idioms_and_slang_are_rejected():
+    """V35 checks against the language the scenario was generated in (spec
+    13.7): an English idiom in a French scenario is invisible noise, and vice
+    versa, so the rule has to pick the matching list rather than always
+    checking English."""
+    sc = make_scenario(language="fr", messages=[
+        dict(id="m_1", at=100, thread_id="th_a", actor_id="a_construction", channel="radio",
+             kind="instruction", text="Contrôle des portes. On est un peu à la bourre, "
+                                      "il était moins une pour D13."),
+    ])
+    assert "V35" in rules_fired(sc)
+
+
+def test_a_french_idiom_does_not_fire_on_an_english_scenario():
+    sc = make_scenario(messages=[
+        dict(id="m_1", at=100, thread_id="th_a", actor_id="a_construction", channel="radio",
+             kind="instruction", text="Door Control. We are a bit à la bourre on D13."),
+    ])
+    assert "V35" not in rules_fired(sc)
+
+
 def test_plain_terse_prose_passes_v35():
     sc = make_scenario(messages=[
         dict(id="m_1", at=100, thread_id="th_a", actor_id="a_construction", channel="radio",

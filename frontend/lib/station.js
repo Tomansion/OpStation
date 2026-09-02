@@ -37,13 +37,13 @@ export function mountStation(host, station, onDoorClick) {
   return view;
 }
 
-export function legend() {
+export function legend(s) {
   const el = document.createElement('div');
   el.className = 'legend';
   el.innerHTML = `
-    <span><i style="background:#00ff40"></i>OPEN</span>
-    <span><i style="background:#ff1a1a"></i>CLOSED</span>
-    <span><i style="background:#7d8589"></i>PERMANENT OPENING — CANNOT BE CLOSED</span>
-    <span>CLICK A DOOR BAR TO TOGGLE IT</span>`;
+    <span><i style="background:#00ff40"></i>${s.legendOpen}</span>
+    <span><i style="background:#ff1a1a"></i>${s.legendClosed}</span>
+    <span><i style="background:#7d8589"></i>${s.legendPermanent}</span>
+    <span>${s.legendClick}</span>`;
   return el;
 }

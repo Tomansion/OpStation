@@ -60,6 +60,10 @@ class Generator:
     difficulty: Difficulty = field(default_factory=load_difficulty)
     progress: Progress = _noop
     log: list[str] = field(default_factory=list)
+    #: Set at the top of `generate()`. An instance field rather than a
+    #: `generate()`-only local because every stage method below reads it off
+    #: `self` rather than threading one more parameter through each of them.
+    language: str = "en"
 
     def _say(self, stage: str, message: str) -> None:
         self.log.append(f"[{stage}] {message}")
@@ -72,7 +76,8 @@ class Generator:
     ) -> Plan:
         self._say("plan", "casting actors and choosing threads")
         system, user = prompts.plan_prompt(
-            self.station, self.difficulty, duration, finale=finale, theme=theme, threads=threads
+            self.station, self.difficulty, duration, finale=finale, theme=theme, threads=threads,
+            language=self.language,
         )
         raw = self.llm.json(system, user)
         plan = Plan(
@@ -143,6 +148,7 @@ class Generator:
                 claimed=claimed,
                 carries_retraction=bool(raws.get(thread.key, {}).get("carries_retraction")),
                 max_hold=int(0.30 * duration),
+                language=self.language,
             )
             return thread, self.llm.json(system, user)
 
@@ -250,6 +256,7 @@ class Generator:
                     {"actor": b.actor_type, "kind": b.kind, "text": b.text}
                     for b in thread.beats
                 ],
+                language=self.language,
             )
             try:
                 raw = self.llm.json(system, user)
@@ -336,6 +343,7 @@ class Generator:
         system, user = prompts.everyday_prompt(
             self.station, self.difficulty, duration,
             actors=plan.actor_names, threads=self._raw_threads, count=count,
+            language=self.language,
         )
         raw = self.llm.json(system, user)
         taken = {t.key for t in plan.threads}
@@ -403,6 +411,7 @@ class Generator:
         system, user = prompts.temptation_prompt(
             self.station, self.difficulty, duration,
             actors=plan.actor_names, obligations=obligations, count=count,
+            language=self.language,
         )
         raw = self.llm.json(system, user)
         pool = ThreadSpec(
@@ -486,7 +495,7 @@ class Generator:
         system, user = prompts.challenge_prompt(
             self.station, self.difficulty, duration, timeline=timeline,
             actors=plan.actor_names, threads=self._raw_threads, slots=slots,
-            retractions=retractions,
+            retractions=retractions, language=self.language,
         )
         raw = self.llm.json(system, user)
 
@@ -749,7 +758,7 @@ class Generator:
 
         self._say("rewrite", f"asking for {len(items)} item(s) to be rewritten")
         system, user = prompts.rewrite_prompt(
-            self.station, self.difficulty, duration, items=items
+            self.station, self.difficulty, duration, items=items, language=self.language,
         )
         try:
             raw = self.llm.json(system, user)
@@ -799,7 +808,9 @@ class Generator:
         everyday: int | None = None,
         temptations: int = 4,
         scenario_id: str | None = None,
+        language: str = "en",
     ) -> GenerationResult:
+        self.language = language
         seed = seed if seed is not None else random.randrange(1, 10_000)
         rng = random.Random(seed)
         scenario_id = scenario_id or _new_id(rng)
@@ -830,6 +841,7 @@ class Generator:
         scenario, schedule = assemble(
             plan, station=self.station, difficulty=self.difficulty,
             scenario_id=scenario_id, model=self.llm.model, seed=seed,
+            language=self.language,
         )
         for note in schedule.notes:
             self.log.append(f"[schedule] {note}")

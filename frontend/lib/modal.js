@@ -7,6 +7,7 @@
  *     and the clock never stops.
  */
 
+import { ACTOR_TYPE_LABELS, strings } from './i18n.js';
 import * as sfx from './sfx.js';
 
 let veil = null;
@@ -37,22 +38,26 @@ export function shake() {
   modal.classList.add('shake');
 }
 
-/* ctx: { scenarioId, dontKnow, onAcknowledge, onAnswer } */
+/* ctx: { scenarioId, dontKnow, lang, onAcknowledge, onAnswer } */
 export function showItem(item, ctx) {
   closeModal();
   veil = document.createElement('div');
   veil.id = 'veil';
 
+  const s = strings(ctx.lang);
+  const actorTypes = ACTOR_TYPE_LABELS[ctx.lang] || ACTOR_TYPE_LABELS.en;
   const alert = item.kind === 'failure_notice';
   const modal = document.createElement('div');
   modal.className = `modal${alert ? ' alert' : ''}`;
 
   const who = alert
-    ? 'STATION ALERT'
-    : (item.actor ? `${item.actor.name.toUpperCase()} — ${item.actor.type.toUpperCase()}` : 'STATION');
+    ? s.stationAlert
+    : (item.actor
+        ? `${item.actor.name.toUpperCase()} — ${actorTypes[item.actor.type] || item.actor.type.toUpperCase()}`
+        : s.station);
   const channel = item.kind === 'challenge'
-    ? 'INCOMING QUERY'
-    : (item.channel === 'radio' ? 'RADIO — AUDIO ONLY' : 'TEXT');
+    ? s.incomingQuery
+    : (item.channel === 'radio' ? s.radioAudioOnly : s.text);
 
   modal.innerHTML = `
     <div class="head"><span>${who}</span><span class="chan">${channel}</span></div>
@@ -100,11 +105,12 @@ function barsHtml() {
 }
 
 function renderMessage(item, ctx, body, foot) {
+  const s = strings(ctx.lang);
   if (item.channel === 'radio') {
     body.innerHTML = `
       <div class="radio">
         <div class="bars" data-bars>${barsHtml()}</div>
-        <div class="state" data-state>OPENING CHANNEL</div>
+        <div class="state" data-state>${s.openingChannel}</div>
       </div>`;
     playRadio(item, ctx, body);
   } else {
@@ -113,7 +119,7 @@ function renderMessage(item, ctx, body, foot) {
   }
   const ack = document.createElement('button');
   ack.className = 'primary';
-  ack.textContent = 'Acknowledge';
+  ack.textContent = s.acknowledge;
   ack.onclick = () => ctx.onAcknowledge(item.uid);
   foot.appendChild(ack);
 }
@@ -153,16 +159,17 @@ function typeText(body, text) {
  * underneath the voice -- three separate assets, sequenced rather than mixed
  * blind, so the words are never competing with the effects. */
 function playRadio(item, ctx, body) {
+  const s = strings(ctx.lang);
   const bars = body.querySelector('[data-bars]');
   const state = body.querySelector('[data-state]');
   const total = item.audio_duration ? `${item.audio_duration.toFixed(1)}s` : '';
 
   if (!item.audio) {
-    state.textContent = 'AUDIO UNAVAILABLE — THIS SESSION IS VOID';
+    state.textContent = s.audioUnavailable;
     return;
   }
   if (item.audio_played) {
-    state.textContent = `TRANSMISSION ENDED — ${total}`;
+    state.textContent = s.transmissionEnded(total);
     state.classList.add('done');
     return;
   }
@@ -178,19 +185,19 @@ function playRadio(item, ctx, body) {
     if (!veil || !veil.contains(body)) { noise.stop(); return; }
 
     bars.classList.add('playing');
-    state.textContent = total ? `RECEIVING — ${total}` : 'RECEIVING';
+    state.textContent = total ? s.receivingTotal(total) : s.receiving;
 
     const audio = new Audio(`/api/scenarios/${ctx.scenarioId}/${item.audio}`);
     track({ stop: () => audio.pause() });
     audio.play().catch(() => {
-      state.textContent = 'AUDIO BLOCKED — THIS SESSION IS VOID';
+      state.textContent = s.audioBlocked;
     });
     audio.ontimeupdate = () => {
-      if (total) state.textContent = `RECEIVING — ${audio.currentTime.toFixed(1)}s / ${total}`;
+      if (total) state.textContent = s.receivingProgress(audio.currentTime.toFixed(1), total);
     };
     audio.onended = () => {
       bars.classList.remove('playing');
-      state.textContent = `TRANSMISSION ENDED — ${total}`;
+      state.textContent = s.transmissionEnded(total);
       state.classList.add('done');
       noise.fadeOut(0.5);
       sfx.play('radio_end', { volume: 0.6 });
@@ -205,6 +212,7 @@ function playRadio(item, ctx, body) {
 }
 
 function renderChallenge(item, ctx, body, foot) {
+  const s = strings(ctx.lang);
   body.innerHTML = `<div data-prompt style="margin-bottom:10px"></div>
                     <div class="options" data-options></div>
                     <div data-verdict></div>`;
@@ -231,19 +239,18 @@ function renderChallenge(item, ctx, body, foot) {
       if (id === item.correct_option_id) button.classList.add('correct');
       else if (id === item.chosen) button.classList.add('wrong');
     }
-    const label = { correct: 'CORRECT', wrong: 'WRONG', dont_know: 'NOT KNOWN' }[item.outcome];
+    const label = { correct: s.outcomeCorrect, wrong: s.outcomeWrong, dont_know: s.outcomeDontKnow }[item.outcome];
     verdict.className = 'verdict';
     verdict.innerHTML =
       `<span class="${item.outcome === 'correct' ? 'ok' : 'no'}">${label}</span> — ` +
       `${escapeHtml(item.explanation || '')}`;
     const ack = document.createElement('button');
     ack.className = 'primary';
-    ack.textContent = 'Acknowledge';
+    ack.textContent = s.acknowledge;
     ack.onclick = () => ctx.onAcknowledge(item.uid);
     foot.appendChild(ack);
   } else {
-    foot.innerHTML = '<span class="note">AN ANSWER IS REQUIRED. THE STATION IS STILL LIVE '
-                   + 'BEHIND THIS PANEL AND THE CLOCK IS STILL RUNNING.</span>';
+    foot.innerHTML = `<span class="note">${s.answerRequired}</span>`;
   }
 }
 

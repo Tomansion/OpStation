@@ -9,6 +9,7 @@
  * lookup handed over during setup. */
 
 import { api } from '../lib/api.js';
+import { LANGUAGES, LANGUAGE_NAMES, strings } from '../lib/i18n.js';
 import { legend, mountStation, stationData } from '../lib/station.js';
 
 export async function home(root, { navigate, audio }) {
@@ -16,105 +17,111 @@ export async function home(root, { navigate, audio }) {
     stationData(), api.scenarios(), api.config(),
   ]);
 
-  root.innerHTML = `
-    <div class="cols">
-      <div class="col grow">
-        <div class="panel">
-          <h2>Station — ${station.version} — practice mode, nothing is recorded</h2>
-          <div class="body"><div data-station></div><div data-legend></div></div>
-        </div>
-      </div>
-      <div class="col">
-        <div class="panel">
-          <h2>Begin a shift</h2>
-          <div class="body">
-            <label for="who">Participant</label>
-            <input id="who" placeholder="name or code" autocomplete="off">
-            <label for="pick">Scenario</label>
-            <select id="pick"></select>
-            <div data-detail class="note" style="margin:8px 0"></div>
-            <button class="primary big" data-start>Start shift</button>
-            <div data-error class="note" style="color:var(--closed);margin-top:8px"></div>
+  // A session is monolingual (spec 16), so the choice made here is the whole
+  // page's language, not just a filter -- the instructions above the map and
+  // the scenario picker below it change together.
+  let lang = 'en';
+
+  function render() {
+    const s = strings(lang);
+    root.innerHTML = `
+      <div class="cols">
+        <div class="col grow">
+          <div class="panel">
+            <h2>${s.stationHeader(station.version)}</h2>
+            <div class="body"><div data-station></div><div data-legend></div></div>
           </div>
         </div>
-        <div class="panel">
-          <h2>Before you start</h2>
-          <div class="body note">
-            <p><strong>Click a door to open or close it.</strong> Green is open, red is
-            closed. Try every one now — once the shift starts the clock runs and
-            never pauses.</p>
-            <p><strong>Two places have no door of their own.</strong> Find them. They
-            are drawn as a break in the wall rather than a bar.</p>
-            <p><strong>Work through the printed sector cards against this map.</strong>
-            Which doors bound a sector is the one thing you cannot read off the
-            station, and it is not what the session is measuring.</p>
-            <p><strong>You get each message once.</strong> No history, no replay, no
-            pause. Radio messages are spoken and have no transcript. Pen and
-            paper are allowed.</p>
-            <p>Pressing <strong>Start shift</strong> resets every door to its standard
-            position and turns the sound on.</p>
+        <div class="col">
+          <div class="panel">
+            <h2>${s.beginShift}
+              <span data-lang style="float:right;font-weight:normal"></span>
+            </h2>
+            <div class="body">
+              <label for="who">${s.participant}</label>
+              <input id="who" placeholder="${s.participantPlaceholder}" autocomplete="off">
+              <label for="pick">${s.scenario}</label>
+              <select id="pick"></select>
+              <div data-detail class="note" style="margin:8px 0"></div>
+              <button class="primary big" data-start>${s.startShift}</button>
+              <div data-error class="note" style="color:var(--closed);margin-top:8px"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>${s.beforeYouStart}</h2>
+            <div class="body note">
+              ${s.instructions.map(p => `<p>${p}</p>`).join('')}
+            </div>
           </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
 
-  const view = mountStation(root.querySelector('[data-station]'), station, id => {
-    view.setDoorState(id, view.getDoorState(id) === 'open' ? 'closed' : 'open');
-  });
-  root.querySelector('[data-legend]').appendChild(legend());
+    const view = mountStation(root.querySelector('[data-station]'), station, id => {
+      view.setDoorState(id, view.getDoorState(id) === 'open' ? 'closed' : 'open');
+    });
+    root.querySelector('[data-legend]').appendChild(legend(s));
 
-  const pick = root.querySelector('#pick');
-  const detail = root.querySelector('[data-detail]');
-  const startButton = root.querySelector('[data-start]');
-  const error = root.querySelector('[data-error]');
+    const langHost = root.querySelector('[data-lang]');
+    for (const code of LANGUAGES) {
+      const btn = document.createElement('button');
+      btn.textContent = LANGUAGE_NAMES[code];
+      btn.className = code === lang ? 'primary' : '';
+      btn.style.marginLeft = '4px';
+      btn.onclick = () => { lang = code; render(); };
+      langHost.appendChild(btn);
+    }
 
-  const playable = scenarios.filter(s => s.playable);
-  if (!playable.length) {
-    pick.innerHTML = '<option value="">— the bank is empty —</option>';
-    startButton.disabled = true;
-    detail.innerHTML = scenarios.length
-      ? `${scenarios.length} scenario(s) in the bank, none playable. `
-        + `<a href="/admin" data-nav>Open admin</a> to see why.`
-      : `No scenarios yet. <a href="/admin" data-nav>Generate one</a>.`;
-  } else {
-    pick.innerHTML = playable
-      .map(s => `<option value="${s.scenario_id}">${s.name} — ${Math.round(s.duration_seconds / 60)} min</option>`)
-      .join('');
+    const pick = root.querySelector('#pick');
+    const detail = root.querySelector('[data-detail]');
+    const startButton = root.querySelector('[data-start]');
+    const error = root.querySelector('[data-error]');
+
+    // Scenarios are generated whole in one language, text and audio alike
+    // (spec 16), so a session in this language can only ever play one of these.
+    const playable = scenarios.filter(sc => sc.playable && sc.language === lang);
+    const anyPlayable = scenarios.filter(sc => sc.playable);
+    if (!playable.length) {
+      pick.innerHTML = `<option value="">${s.bankEmpty}</option>`;
+      startButton.disabled = true;
+      detail.innerHTML = anyPlayable.length
+        ? `${s.someUnplayable(scenarios.length)}`
+          + `<a href="/admin" data-nav>${s.openAdmin}</a>${s.toSeeWhy}`
+        : `${s.noScenariosYet}<a href="/admin" data-nav>${s.generateOne}</a>.`;
+    } else {
+      pick.innerHTML = playable.map(sc => `<option value="${sc.scenario_id}">${s.scenarioOption(sc)}</option>`).join('');
+    }
+
+    function describe() {
+      const chosen = playable.find(sc => sc.scenario_id === pick.value);
+      if (!chosen) return;
+      detail.textContent = s.describe(chosen);
+    }
+    pick.onchange = describe;
+    describe();
+
+    startButton.onclick = async () => {
+      error.textContent = '';
+      startButton.disabled = true;
+      try {
+        // The gesture that primes audio. If priming fails, refuse to start rather
+        // than beginning a session that will have to be thrown away.
+        await audio.prime();
+      } catch (exc) {
+        error.textContent = s.soundFailed(exc.message);
+        startButton.disabled = false;
+        return;
+      }
+      try {
+        const { session_id } = await api.createSession(
+          root.querySelector('#who').value, pick.value,
+        );
+        navigate(`/game/${session_id}`);
+      } catch (exc) {
+        error.textContent = exc.message;
+        startButton.disabled = false;
+      }
+    };
   }
 
-  function describe() {
-    const chosen = playable.find(s => s.scenario_id === pick.value);
-    if (!chosen) return;
-    detail.textContent =
-      `${chosen.messages} messages, ${chosen.threads} threads, `
-      + `${chosen.radio_messages} spoken. Station ${chosen.station_version}.`
-      + (chosen.tunables_match ? '' : ' Validated against different difficulty settings.');
-  }
-  pick.onchange = describe;
-  describe();
-
-  startButton.onclick = async () => {
-    error.textContent = '';
-    startButton.disabled = true;
-    try {
-      // The gesture that primes audio. If priming fails, refuse to start rather
-      // than beginning a session that will have to be thrown away.
-      await audio.prime();
-    } catch (exc) {
-      error.textContent = `Sound could not be started (${exc.message}). `
-        + 'A session without audio is void, so it will not begin. '
-        + 'Check the browser is not muted and try again.';
-      startButton.disabled = false;
-      return;
-    }
-    try {
-      const { session_id } = await api.createSession(
-        root.querySelector('#who').value, pick.value,
-      );
-      navigate(`/game/${session_id}`);
-    } catch (exc) {
-      error.textContent = exc.message;
-      startButton.disabled = false;
-    }
-  };
+  render();
 }

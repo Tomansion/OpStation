@@ -8,6 +8,7 @@ Where a rule is partly semantic ("no two options are semantically equivalent"),
 the mechanical part is an error and the judgement part is a warning. The
 docstring says which, so nobody mistakes a warning for a proof.
 """
+
 from __future__ import annotations
 
 import re
@@ -86,12 +87,15 @@ class Ctx:
         return msg.actor_id if msg else None
 
     def doors_in_text(self, text: str) -> list[str]:
-        return [f"{m.group(1).upper()}{int(m.group(2))}" for m in DOOR_RE.finditer(text)]
+        return [
+            f"{m.group(1).upper()}{int(m.group(2))}" for m in DOOR_RE.finditer(text)
+        ]
 
 
 # ===========================================================================
 # 13.1 Structural
 # ===========================================================================
+
 
 def v01(ctx: Ctx) -> Iterator[Finding]:
     """All ids unique; every cross-reference resolves."""
@@ -112,29 +116,45 @@ def v01(ctx: Ctx) -> Iterator[Finding]:
             seen[i] = kind
 
     actors, threads, groups, messages = (
-        set(buckets["actor"]), set(buckets["thread"]),
-        set(buckets["task_group"]), set(buckets["message"]),
+        set(buckets["actor"]),
+        set(buckets["thread"]),
+        set(buckets["task_group"]),
+        set(buckets["message"]),
     )
     for m in sc.messages:
         if m.thread_id not in threads:
-            yield Finding("V1", f"message references unknown thread {m.thread_id!r}", m.id)
+            yield Finding(
+                "V1", f"message references unknown thread {m.thread_id!r}", m.id
+            )
         if m.actor_id not in actors:
-            yield Finding("V1", f"message references unknown actor {m.actor_id!r}", m.id)
+            yield Finding(
+                "V1", f"message references unknown actor {m.actor_id!r}", m.id
+            )
         if m.task_group_id and m.task_group_id not in groups:
-            yield Finding("V1", f"message references unknown group {m.task_group_id!r}", m.id)
+            yield Finding(
+                "V1", f"message references unknown group {m.task_group_id!r}", m.id
+            )
     for g in sc.task_groups:
         if g.thread_id not in threads:
-            yield Finding("V1", f"group references unknown thread {g.thread_id!r}", g.id)
+            yield Finding(
+                "V1", f"group references unknown thread {g.thread_id!r}", g.id
+            )
     for t in sc.tasks:
         if t.group_id not in groups:
             yield Finding("V1", f"task references unknown group {t.group_id!r}", t.id)
         if t.message_id not in messages:
-            yield Finding("V1", f"task references unknown message {t.message_id!r}", t.id)
+            yield Finding(
+                "V1", f"task references unknown message {t.message_id!r}", t.id
+            )
     for c in sc.all_challenges:
         if c.thread_id not in threads:
-            yield Finding("V1", f"challenge references unknown thread {c.thread_id!r}", c.id)
+            yield Finding(
+                "V1", f"challenge references unknown thread {c.thread_id!r}", c.id
+            )
         if c.actor_id not in actors:
-            yield Finding("V1", f"challenge references unknown actor {c.actor_id!r}", c.id)
+            yield Finding(
+                "V1", f"challenge references unknown actor {c.actor_id!r}", c.id
+            )
 
     # The set of message kinds is closed (spec 11.1). An invented kind is not
     # harmless: `kind` is what the admin page reads to tell a release from a
@@ -199,7 +219,9 @@ def v04(ctx: Ctx) -> Iterator[Finding]:
         for door, state in t.require.items():
             if door not in known:
                 yield Finding(
-                    "V4", f"unknown door {door!r} (station has {sorted(known, key=door_sort_key)})", t.id
+                    "V4",
+                    f"unknown door {door!r} (station has {sorted(known, key=door_sort_key)})",
+                    t.id,
                 )
             if state not in ("open", "closed"):
                 yield Finding("V4", f"door {door} has invalid state {state!r}", t.id)
@@ -253,7 +275,9 @@ def v06(ctx: Ctx) -> Iterator[Finding]:
     types = [a.type for a in actors]
     for t in ACTOR_TYPES:
         if types.count(t) != 1:
-            yield Finding("V6", f"actor type {t!r} used {types.count(t)} times, expected once")
+            yield Finding(
+                "V6", f"actor type {t!r} used {types.count(t)} times, expected once"
+            )
     for a in actors:
         if a.type not in ACTOR_TYPES:
             yield Finding("V6", f"unknown actor type {a.type!r}", a.id)
@@ -270,12 +294,16 @@ def v06(ctx: Ctx) -> Iterator[Finding]:
             continue
         opening = msg.text[:48].lower()
         named = [
-            a for a in actors
+            a
+            for a in actors
             if a.id != msg.actor_id
             and (a.name.split()[-1].lower() in opening or a.type in opening)
         ]
-        if named and speaker.name.split()[-1].lower() not in opening \
-                and speaker.type not in opening:
+        if (
+            named
+            and speaker.name.split()[-1].lower() not in opening
+            and speaker.type not in opening
+        ):
             yield Finding(
                 "V6",
                 f"spoken by {speaker.type} but introduces itself as "
@@ -287,6 +315,7 @@ def v06(ctx: Ctx) -> Iterator[Finding]:
 # ===========================================================================
 # 13.2 Timing
 # ===========================================================================
+
 
 def v07(ctx: Ctx) -> Iterator[Finding]:
     """A task cannot start before the player could have read its message."""
@@ -378,31 +407,41 @@ def v12(ctx: Ctx) -> Iterator[Finding]:
     sc = ctx.scenario
     want_in, want_deb = vol["challenges_in_session"], vol["challenges_debrief"]
     if len(sc.challenges) != want_in:
-        yield Finding("V12", f"{len(sc.challenges)} in-session challenges, expected {want_in}")
+        yield Finding(
+            "V12", f"{len(sc.challenges)} in-session challenges, expected {want_in}"
+        )
     if len(sc.debrief_challenges) != want_deb:
         yield Finding(
-            "V12", f"{len(sc.debrief_challenges)} debrief challenges, expected {want_deb}"
+            "V12",
+            f"{len(sc.debrief_challenges)} debrief challenges, expected {want_deb}",
         )
     half = 0.5 * sc.duration_seconds
     for ch in sc.challenges:
         if ch.slot != "in_session":
-            yield Finding("V12", f"slot is {ch.slot!r} but it is in `challenges`", ch.id)
+            yield Finding(
+                "V12", f"slot is {ch.slot!r} but it is in `challenges`", ch.id
+            )
         if ch.at < half:
             yield Finding(
                 "V12", f"at {ch.at}, before the 50% mark ({half:.0f}s)", ch.id
             )
     for ch in sc.debrief_challenges:
         if ch.slot != "debrief":
-            yield Finding("V12", f"slot is {ch.slot!r} but it is in `debrief_challenges`", ch.id)
+            yield Finding(
+                "V12", f"slot is {ch.slot!r} but it is in `debrief_challenges`", ch.id
+            )
     ordered = sorted(sc.challenges, key=lambda c: c.at)
     for a, b in zip(ordered, ordered[1:]):
         if b.at - a.at < 120:
-            yield Finding("V12", f"only {b.at - a.at}s after {a.id} (minimum 120s)", b.id)
+            yield Finding(
+                "V12", f"only {b.at - a.at}s after {a.id} (minimum 120s)", b.id
+            )
 
 
 # ===========================================================================
 # 13.3 Solvability
 # ===========================================================================
+
 
 def v13(ctx: Ctx) -> Iterator[Finding]:
     """No two live obligations demand opposite states on one door at one moment.
@@ -503,7 +542,10 @@ def v17(ctx: Ctx) -> Iterator[Finding]:
         asked = set(ctx.doors_in_text(msg.text))
         live: list[str] = []
         for c in ctx.sim.constraints:
-            if c.start <= msg.at <= c.end and c.task_id not in ctx.sim.cancelled_task_ids:
+            if (
+                c.start <= msg.at <= c.end
+                and c.task_id not in ctx.sim.cancelled_task_ids
+            ):
                 live.append(c.door)
         contradicted = asked & set(live)
         if not asked:
@@ -523,15 +565,20 @@ def v17(ctx: Ctx) -> Iterator[Finding]:
         else:
             for door in sorted(contradicted):
                 states = {
-                    c.state for c in ctx.sim.constraints
+                    c.state
+                    for c in ctx.sim.constraints
                     if c.door == door and c.start <= msg.at <= c.end
                 }
                 thread_ids = {
-                    ctx.scenario.groups_by_id[ctx.scenario.tasks_by_id[c.task_id].group_id].thread_id
+                    ctx.scenario.groups_by_id[
+                        ctx.scenario.tasks_by_id[c.task_id].group_id
+                    ].thread_id
                     for c in ctx.sim.constraints
-                    if c.door == door and c.start <= msg.at <= c.end
+                    if c.door == door
+                    and c.start <= msg.at <= c.end
                     and c.task_id in ctx.scenario.tasks_by_id
-                    and ctx.scenario.tasks_by_id[c.task_id].group_id in ctx.scenario.groups_by_id
+                    and ctx.scenario.tasks_by_id[c.task_id].group_id
+                    in ctx.scenario.groups_by_id
                 }
                 if thread_ids == {msg.thread_id}:
                     yield Finding(
@@ -540,7 +587,11 @@ def v17(ctx: Ctx) -> Iterator[Finding]:
                         "a temptation has to pull against a *different* thread",
                         msg.id,
                     )
-                if states == {"open"} and "open" in msg.text.lower() and "clos" not in msg.text.lower():
+                if (
+                    states == {"open"}
+                    and "open" in msg.text.lower()
+                    and "clos" not in msg.text.lower()
+                ):
                     yield Finding(
                         "V17",
                         f"{door} is already required open, so asking to open it is not a "
@@ -564,7 +615,9 @@ def v18(ctx: Ctx) -> Iterator[Finding]:
             if b.at - a.at < 240:
                 continue
             live = any(
-                t.at <= b.at and t.until >= a.at and t.id not in ctx.sim.cancelled_task_ids
+                t.at <= b.at
+                and t.until >= a.at
+                and t.id not in ctx.sim.cancelled_task_ids
                 for t in tasks
             )
             if live:
@@ -601,17 +654,19 @@ def v19(ctx: Ctx) -> Iterator[Finding]:
     for ch in sc.all_challenges:
         correct = [o for o in ch.options if o.correct]
         if len(correct) != 1:
-            yield Finding("V19", f"{len(correct)} options marked correct, expected 1", ch.id)
+            yield Finding(
+                "V19", f"{len(correct)} options marked correct, expected 1", ch.id
+            )
         if len(ch.options) != 4:
             yield Finding(
                 "V19",
-                f"{len(ch.options)} options, expected 4 — the fifth, \"I don't know\", is "
+                f'{len(ch.options)} options, expected 4 — the fifth, "I don\'t know", is '
                 "supplied by the UI and must never appear in the JSON",
                 ch.id,
             )
         for o in ch.options:
             if o.text.strip().lower().rstrip(".") == "i don't know":
-                yield Finding("V19", "\"I don't know\" must not be authored", ch.id)
+                yield Finding("V19", '"I don\'t know" must not be authored', ch.id)
         texts = [o.text.strip().lower() for o in ch.options]
         if len(set(texts)) != len(texts):
             yield Finding("V19", "two options have the same text", ch.id)
@@ -662,7 +717,8 @@ def v19(ctx: Ctx) -> Iterator[Finding]:
         vocabulary = _scenario_vocabulary(ctx)
         distractors = [o for o in ch.options if not o.correct]
         generic = [
-            o for o in distractors
+            o
+            for o in distractors
             if not set(re.findall(r"[a-z0-9]+", o.text.lower())) & vocabulary
         ]
         # A `time` question's answer space is durations, and every distractor is
@@ -699,7 +755,22 @@ def _scenario_vocabulary(ctx: Ctx) -> set[str]:
         out |= set(re.findall(r"[a-z0-9]+", th.title.lower()))
     for g in ctx.scenario.task_groups:
         out |= set(re.findall(r"[a-z0-9]+", g.label.lower()))
-    return out - {"the", "a", "an", "of", "and", "to", "in", "is", "for", "on", "bay", "c1", "c2", "c3"}
+    return out - {
+        "the",
+        "a",
+        "an",
+        "of",
+        "and",
+        "to",
+        "in",
+        "is",
+        "for",
+        "on",
+        "bay",
+        "c1",
+        "c2",
+        "c3",
+    }
 
 
 def v20(ctx: Ctx) -> Iterator[Finding]:
@@ -714,7 +785,8 @@ def v20(ctx: Ctx) -> Iterator[Finding]:
     incidents = [t for t in sc.threads if t.grade in ("ordinary", "finale")]
     if len(incidents) < vol["threads_min"]:
         yield Finding(
-            "V20", f"{len(incidents)} incident threads, expected at least {vol['threads_min']}"
+            "V20",
+            f"{len(incidents)} incident threads, expected at least {vol['threads_min']}",
         )
     finales = [t for t in sc.threads if t.grade == "finale"]
     if len(finales) != 1:
@@ -785,7 +857,8 @@ def v22(ctx: Ctx) -> Iterator[Finding]:
             )
         if not any(lo <= p <= hi for p in phases):
             yield Finding(
-                "V22", f"no message falls inside its declared phase_span {list(thread.phase_span)}",
+                "V22",
+                f"no message falls inside its declared phase_span {list(thread.phase_span)}",
                 thread.id,
             )
 
@@ -793,6 +866,7 @@ def v22(ctx: Ctx) -> Iterator[Finding]:
 # ===========================================================================
 # 13.4 Derived obligations
 # ===========================================================================
+
 
 def v23(ctx: Ctx) -> Iterator[Finding]:
     """A derived task's `require` map must equal the cut recomputed from the
@@ -852,7 +926,11 @@ def v24(ctx: Ctx) -> Iterator[Finding]:
         if task.derived_from is None:
             continue
         target_id = task.derived_from.isolation_target
-        if target_id in st.not_isolable or target_id in st.areas and not st.sealable_alone(target_id):
+        if (
+            target_id in st.not_isolable
+            or target_id in st.areas
+            and not st.sealable_alone(target_id)
+        ):
             enclosing = st.smallest_volume_containing(target_id)
             hint = f" — name {enclosing.id!r} instead" if enclosing else ""
             yield Finding(
@@ -886,9 +964,11 @@ def v25(ctx: Ctx) -> Iterator[Finding]:
         if target is None or msg is None:
             continue
         low = msg.text.lower()
-        names = [target.phrase.lower()] + [
-            ctx.station.area_prose(a).lower() for a in target.volume
-        ] + [ctx.station.area_name(a).lower() for a in target.volume]
+        names = (
+            [target.phrase.lower()]
+            + [ctx.station.area_prose(a).lower() for a in target.volume]
+            + [ctx.station.area_name(a).lower() for a in target.volume]
+        )
         if not any(n and n in low for n in names if n):
             yield Finding(
                 "V25",
@@ -899,7 +979,9 @@ def v25(ctx: Ctx) -> Iterator[Finding]:
     for msg in ctx.scenario.messages:
         for door in ctx.doors_in_text(msg.text):
             if door not in ctx.station.doors:
-                yield Finding("V25", f"names a door that does not exist: {door}", msg.id)
+                yield Finding(
+                    "V25", f"names a door that does not exist: {door}", msg.id
+                )
         for match in SUSPECT_PLACE_RE.finditer(msg.text):
             phrase = match.group(0).lower().strip()
             if phrase in phrases:
@@ -917,6 +999,7 @@ def v25(ctx: Ctx) -> Iterator[Finding]:
 # ===========================================================================
 # 13.5 Retractions
 # ===========================================================================
+
 
 def _freed_by(ctx: Ctx, msg: Message) -> tuple[dict[str, str], set[str]]:
     """What a retraction actually releases, and which tasks it releases.
@@ -955,11 +1038,15 @@ def v26(ctx: Ctx) -> Iterator[Finding]:
     for msg in sc.sorted_messages():
         if not msg.cancels:
             if msg.kind == "retraction":
-                yield Finding("V26", "kind is retraction but `cancels` is empty", msg.id)
+                yield Finding(
+                    "V26", "kind is retraction but `cancels` is empty", msg.id
+                )
             continue
         if msg.kind != "retraction":
             yield Finding(
-                "V26", f"carries `cancels` but kind is {msg.kind!r}, expected 'retraction'", msg.id
+                "V26",
+                f"carries `cancels` but kind is {msg.kind!r}, expected 'retraction'",
+                msg.id,
             )
         for target in msg.cancels:
             tasks: list[Task]
@@ -968,7 +1055,9 @@ def v26(ctx: Ctx) -> Iterator[Finding]:
             elif target in sc.tasks_by_id:
                 tasks = [sc.tasks_by_id[target]]
             else:
-                yield Finding("V26", f"cancels {target!r}, which does not exist", msg.id)
+                yield Finding(
+                    "V26", f"cancels {target!r}, which does not exist", msg.id
+                )
                 continue
             if target in seen_cancelled:
                 yield Finding(
@@ -999,7 +1088,9 @@ def v27(ctx: Ctx) -> Iterator[Finding]:
     """
     sc = ctx.scenario
     for msg in sc.retractions():
-        live_groups = _live_groups_of_actor(ctx, msg.actor_id, msg.at, exclude=msg.cancels)
+        live_groups = _live_groups_of_actor(
+            ctx, msg.actor_id, msg.at, exclude=msg.cancels
+        )
         if not live_groups:
             continue
         cancelled_labels = [
@@ -1025,7 +1116,7 @@ def v27(ctx: Ctx) -> Iterator[Finding]:
                 "V27",
                 f"{ctx.scenario.actors_by_id[msg.actor_id].type} still holds "
                 f"{len(live_groups)} other live obligation(s) "
-                f"({sorted(live_groups)}), so \"{msg.text[:60]}...\" cannot be resolved. "
+                f'({sorted(live_groups)}), so "{msg.text[:60]}..." cannot be resolved. '
                 f"Name the door, the place, or the subject: one of {sorted(set(cues))[:6]}"
                 + (f" (withdrawing: {cancelled_labels})" if cancelled_labels else ""),
                 msg.id,
@@ -1036,7 +1127,8 @@ def _live_groups_of_actor(ctx: Ctx, actor_id: str, at: float, exclude=()) -> set
     """Groups created by this actor with a task still pending at `at`."""
     sc = ctx.scenario
     mine = {
-        m.task_group_id for m in sc.messages
+        m.task_group_id
+        for m in sc.messages
         if m.actor_id == actor_id and m.task_group_id and m.at <= at
     }
     out = set()
@@ -1060,9 +1152,7 @@ def v28(ctx: Ctx) -> Iterator[Finding]:
             continue
         creators = set()
         for gid in msg.cancels:
-            creators |= {
-                m.actor_id for m in sc.messages if m.task_group_id == gid
-            }
+            creators |= {m.actor_id for m in sc.messages if m.task_group_id == gid}
             if gid in sc.tasks_by_id:
                 owner = sc.messages_by_id.get(sc.tasks_by_id[gid].message_id)
                 if owner:
@@ -1078,7 +1168,8 @@ def v28(ctx: Ctx) -> Iterator[Finding]:
                 )
             low = msg.text.lower()
             unnamed = [
-                sc.actors_by_id[a].type for a in others
+                sc.actors_by_id[a].type
+                for a in others
                 if sc.actors_by_id[a].type not in low
                 and sc.actors_by_id[a].name.split()[-1].lower() not in low
             ]
@@ -1111,7 +1202,8 @@ def v29(ctx: Ctx) -> Iterator[Finding]:
     for msg in sc.retractions():
         freed, released = _freed_by(ctx, msg)
         opposite = {
-            door: ("open" if state == "closed" else "closed") for door, state in freed.items()
+            door: ("open" if state == "closed" else "closed")
+            for door, state in freed.items()
         }
         has_task = any(
             t.at > msg.at
@@ -1196,6 +1288,7 @@ def v31(ctx: Ctx) -> Iterator[Finding]:
 # 13.6 Station consistency
 # ===========================================================================
 
+
 def v32(ctx: Ctx) -> Iterator[Finding]:
     """No invented doors, rooms or corridors anywhere in the prose."""
     texts: list[tuple[str, str]] = [(m.id, m.text) for m in ctx.scenario.messages]
@@ -1221,7 +1314,9 @@ def v32(ctx: Ctx) -> Iterator[Finding]:
             if phrase in phrases or any(phrase in p for p in phrases):
                 continue
             yield Finding(
-                "V32", f"names {match.group(0)!r}, which is not a place on this station", where
+                "V32",
+                f"names {match.group(0)!r}, which is not a place on this station",
+                where,
             )
 
 
@@ -1261,16 +1356,45 @@ def v34(ctx: Ctx) -> Iterator[Finding]:
 
 
 ALL_RULES = [
-    v01, v02, v03, v04, v05, v06, v07, v08, v09, v10, v11, v12,
-    v13, v14, v15, v16, v17, v18, v19, v20, v21, v22,
-    v23, v24, v25,
-    v26, v27, v28, v29, v30, v31,
-    v32, v33, v34,
+    v01,
+    v02,
+    v03,
+    v04,
+    v05,
+    v06,
+    v07,
+    v08,
+    v09,
+    v10,
+    v11,
+    v12,
+    v13,
+    v14,
+    v15,
+    v16,
+    v17,
+    v18,
+    v19,
+    v20,
+    v21,
+    v22,
+    v23,
+    v24,
+    v25,
+    v26,
+    v27,
+    v28,
+    v29,
+    v30,
+    v31,
+    v32,
+    v33,
+    v34,
 ]
 
 
 # ===========================================================================
-# 13.7 Plain English
+# 13.7 Plain language
 # ===========================================================================
 
 #: Figures of speech and slang that models reach for and that a non-native
@@ -1278,18 +1402,67 @@ ALL_RULES = [
 #: that are unambiguous as strings -- standard radio procedure words ("copy",
 #: "roger", "stand by", "say again") are not here, because they are consistent,
 #: learnable, and part of what makes the fiction work.
-IDIOMS: tuple[str, ...] = (
-    "keep an eye", "buy me time", "buy us time", "buy some time", "clock is ticking",
-    "up against it", "piece of cake", "heads up", "in the loop", "same page",
-    "ballpark", "hold your horses", "no dice", "spot on", "dead in the water",
-    "call it a day", "give me a hand", "up to speed", "ball is in your court",
-    "bite the bullet", "cut corners", "under the weather", "throw a spanner",
-    "wild goose", "back to square one", "in hot water", "on thin ice",
-    "bend over backwards", "cut to the chase", "at the end of the day",
-    "long story short", "touch base", "circle back", "moving forward",
-    " mikes", " klicks", " clicks", "asap", "pronto", "gonna", "gotta", "wanna",
-    "ain't", "y'all", "kinda", "sorta", "no biggie", "for kicks", "a heads-up",
+IDIOMS_EN: tuple[str, ...] = (
+    "keep an eye",
+    "buy me time",
+    "buy us time",
+    "buy some time",
+    "clock is ticking",
+    "up against it",
+    "piece of cake",
+    "heads up",
+    "in the loop",
+    "same page",
+    "ballpark",
+    "hold your horses",
+    "no dice",
+    "spot on",
+    "dead in the water",
+    "call it a day",
+    "give me a hand",
+    "up to speed",
+    "ball is in your court",
+    "bite the bullet",
+    "cut corners",
+    "under the weather",
+    "throw a spanner",
+    "wild goose",
+    "back to square one",
+    "in hot water",
+    "on thin ice",
+    "bend over backwards",
+    "cut to the chase",
+    "at the end of the day",
+    "long story short",
+    "touch base",
+    "circle back",
+    "moving forward",
+    " mikes",
+    " klicks",
+    " clicks",
+    "asap",
+    "pronto",
+    "gonna",
+    "gotta",
+    "wanna",
+    "ain't",
+    "y'all",
+    "kinda",
+    "sorta",
+    "no biggie",
+    "for kicks",
+    "a heads-up",
 )
+
+#: The French arm's equivalent of IDIOMS_EN (spec 13.7). Not a translation of
+#: the English list -- an idiom is idiomatic in one language and not the
+#: other, so this is its own curated set of French figures of speech, slang
+#: and contracted registers a non-native French speaker would have to decode
+#: in one hearing. "feu vert"/"feu rouge" ("green light"/"red light") are
+#: included for a second reason beyond idiom: this game already uses green
+#: and red as the literal, load-bearing colour of an open and a closed door,
+#: so the figurative sense would collide with the mechanic itself.
+IDIOMS_FR: tuple[str, ...] = ()
 
 #: A spoken instruction longer than this is hard to hold in one hearing.
 LONG_SENTENCE_WORDS = 20
@@ -1300,21 +1473,22 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def v35(ctx: Ctx) -> Iterator[Finding]:
-    """Plain English.
+    """Plain language.
 
-    Most players are not native English speakers, and a `radio` message is heard
-    exactly once with no transcript and no replay. That makes reading difficulty
-    a confound rather than a style preference: a player who fails because they
-    did not parse an idiom has been measured on their English, not on their
-    memory.
+    Most players are not native speakers of the scenario's language, and a
+    `radio` message is heard exactly once with no transcript and no replay.
+    That makes reading difficulty a confound rather than a style preference: a
+    player who fails because they did not parse an idiom has been measured on
+    their reading of the language, not on their memory.
 
     Errors: idioms, figures of speech, slang, and any sentence long enough that
     holding it in one hearing is the hard part. Warnings: sentences over
     twenty words, which are worth tightening but will not invalidate a session.
     """
+    idioms = IDIOMS_FR if ctx.scenario.language == "fr" else IDIOMS_EN
     for where, text, spoken in _all_prose(ctx):
         low = f" {text.lower()} "
-        for idiom in IDIOMS:
+        for idiom in idioms:
             if idiom in low:
                 yield Finding(
                     "V35",

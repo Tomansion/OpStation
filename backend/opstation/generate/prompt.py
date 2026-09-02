@@ -14,18 +14,20 @@ import json
 
 from ..config import Difficulty
 from ..station import Station
-from .brief import rules_brief, station_brief
+from .brief import LANGUAGE_NAMES, rules_brief, station_brief
 
-SYSTEM = """You are the scenario author for OpStation, a door-control game used
+
+def system_prompt(language: str = "en") -> str:
+    return f"""You are the scenario author for OpStation, a door-control game used
 as a research instrument for measuring memory. You write terse, credible station
-radio traffic and you follow structural rules exactly.
+radio traffic in {LANGUAGE_NAMES[language]} and you follow structural rules exactly.
 
 You always reply with a single JSON object and nothing else. No prose outside the
 JSON, no markdown fence, no commentary."""
 
 
-def _context(st: Station, diff: Difficulty, duration: int) -> str:
-    return f"{station_brief(st)}\n\n{'=' * 78}\n\n{rules_brief(diff, duration)}"
+def _context(st: Station, diff: Difficulty, duration: int, language: str = "en") -> str:
+    return f"{station_brief(st)}\n\n{'=' * 78}\n\n{rules_brief(diff, duration, language)}"
 
 
 # ---------------------------------------------------------------- stage 1: plan
@@ -51,13 +53,13 @@ CATALOGUE_FINALE = {
 
 def plan_prompt(
     st: Station, diff: Difficulty, duration: int, *, finale: str | None = None,
-    theme: str | None = None, threads: int = 5,
+    theme: str | None = None, threads: int = 5, language: str = "en",
 ) -> tuple[str, str]:
     vol = diff.volumes
     finale_choices = (
         {finale: CATALOGUE_FINALE[finale]} if finale in CATALOGUE_FINALE else CATALOGUE_FINALE
     )
-    user = f"""{_context(st, diff, duration)}
+    user = f"""{_context(st, diff, duration, language)}
 
 {'=' * 78}
 
@@ -74,9 +76,11 @@ FINALE (choose exactly one)
 {f'THEME HINT: {theme}' if theme else ''}
 
 Name one person per actor type. Names should sound like a working crew roster,
-not like a cast list: rank or role plus surname is ideal. The `system` actor is
-the station's automated voice and is not a person, so give it a plain label such
-as "Station Control" or "OpStation Automated".
+not like a cast list: rank or role plus surname is ideal, and names should sound
+like {LANGUAGE_NAMES[language]}-speaking crew. The `system` actor is the
+station's automated voice and is not a person, so give it a plain label such
+as "Station Control" or "OpStation Automated" (translated, if the language is
+not English).
 
 Reply with JSON:
 {{
@@ -111,7 +115,7 @@ Rules for the plan:
   restricts, and do not let two threads restrict the same door.
 - Set `carries_retraction: true` on exactly two threads. Those are the ones
   where an actor will later withdraw an instruction they gave."""
-    return SYSTEM, user
+    return system_prompt(language), user
 
 
 # --------------------------------------------------------------- stage 2: beats
@@ -119,7 +123,7 @@ Rules for the plan:
 def beats_prompt(
     st: Station, diff: Difficulty, duration: int, *, thread: dict, actors: dict[str, str],
     other_threads: list[dict], teach_bypass: bool, claimed: list[str] | None = None,
-    carries_retraction: bool = False, max_hold: int = 480,
+    carries_retraction: bool = False, max_hold: int = 480, language: str = "en",
 ) -> tuple[str, str]:
     others = json.dumps(
         [{k: t.get(k) for k in ("key", "title", "premise")} for t in other_threads], indent=2
@@ -159,7 +163,7 @@ Choose the style by how much work the player has to do:
                   the reopen I asked for"
 """ if carries_retraction else ""
 
-    user = f"""{_context(st, diff, duration)}
+    user = f"""{_context(st, diff, duration, language)}
 
 {'=' * 78}
 
@@ -245,16 +249,16 @@ WHAT MAKES THIS THREAD WORTH PLAYING
   or deliberately never does — the reactor-maintenance shape, where the player
   has to know that nobody ever confirmed.
 - 4 to 9 beats. Terse. Nobody explains the game."""
-    return SYSTEM, user
+    return system_prompt(language), user
 
 
 # ----------------------------------------------------------- stage 3: everyday
 
 def everyday_prompt(
     st: Station, diff: Difficulty, duration: int, *, actors: dict[str, str],
-    threads: list[dict], count: int,
+    threads: list[dict], count: int, language: str = "en",
 ) -> tuple[str, str]:
-    user = f"""{_context(st, diff, duration)}
+    user = f"""{_context(st, diff, duration, language)}
 
 {'=' * 78}
 
@@ -319,16 +323,16 @@ corridor.
 Watch the starting state: D4, D5, D7, D9 and D12 start OPEN, everything else
 CLOSED. "Open D5 for me" is invalid — D5 is already open. "Hold D5 closed while
 we clean" is valid and good."""
-    return SYSTEM, user
+    return system_prompt(language), user
 
 
 # --------------------------------------------------------- stage 4: temptations
 
 def temptation_prompt(
     st: Station, diff: Difficulty, duration: int, *, actors: dict[str, str],
-    obligations: list[dict], count: int,
+    obligations: list[dict], count: int, language: str = "en",
 ) -> tuple[str, str]:
-    user = f"""{_context(st, diff, duration)}
+    user = f"""{_context(st, diff, duration, language)}
 
 {'=' * 78}
 
@@ -370,7 +374,7 @@ Reply with JSON:
 Each request MUST name, in the prose, at least one door id that the targeted
 obligation requires ({', '.join(sorted({d for o in obligations for d in o.get('doors', [])}))}).
 Make it sympathetic and specific — a person with a reason, not a test."""
-    return SYSTEM, user
+    return system_prompt(language), user
 
 
 # --------------------------------------------------------- stage 5: challenges
@@ -378,6 +382,7 @@ Make it sympathetic and specific — a person with a reason, not a test."""
 def challenge_prompt(
     st: Station, diff: Difficulty, duration: int, *, timeline: str, actors: dict[str, str],
     threads: list[dict], slots: list[dict], retractions: list[dict] | None = None,
+    language: str = "en",
 ) -> tuple[str, str]:
     retraction_note = ""
     if retractions:
@@ -394,7 +399,7 @@ player who remembers the original instruction but not the withdrawal will pick a
 distractor that used to be true.
 """
 
-    user = f"""{_context(st, diff, duration)}
+    user = f"""{_context(st, diff, duration, language)}
 
 {'=' * 78}
 
@@ -477,7 +482,7 @@ HARD RULES
 - One question must be about a thread that has been silent for several minutes
   while still holding an obligation. The debrief questions should reach back
   furthest, including threads not heard from in ten minutes or more."""
-    return SYSTEM, user
+    return system_prompt(language), user
 
 
 # ------------------------------------------------------------------- repairs
@@ -489,10 +494,14 @@ TEXT_RULES = frozenset({"V19", "V25", "V27", "V28", "V32", "V35", "V36", "V37", 
 
 
 def rewrite_prompt(
-    st: Station, diff: Difficulty, duration: int, *, items: list[dict],
+    st: Station, diff: Difficulty, duration: int, *, items: list[dict], language: str = "en",
 ) -> tuple[str, str]:
     """Ask for a rewrite of specific messages or challenges, and nothing else."""
+    language_line = (
+        "" if language == "en" else f"\nWrite the rewrite in {LANGUAGE_NAMES[language]}.\n"
+    )
     user = f"""{station_brief(st)}
+{language_line}
 
 {'=' * 78}
 
@@ -532,14 +541,15 @@ Reminders that cover most of these errors:
   reads — describe what happened in prose instead.
 - A message is never a question — nothing outside a challenge can be answered.
   Say it as a statement or a report.
-- Plain English. Short sentences, common words, no idioms, no slang, no jokes.
-  Most players are not native speakers and a spoken message is heard once."""
-    return SYSTEM, user
+- Plain {LANGUAGE_NAMES[language]}. Short sentences, common words, no idioms, no
+  slang, no jokes. Most players are not native speakers and a spoken message is
+  heard once."""
+    return system_prompt(language), user
 
 
 def retraction_prompt(
     st: Station, diff: Difficulty, duration: int, *, thread: dict, actor: str,
-    obligation: dict, beats: list[dict],
+    obligation: dict, beats: list[dict], language: str = "en",
 ) -> tuple[str, str]:
     """Ask for one withdrawal and the obligation that gives it teeth.
 
@@ -548,7 +558,11 @@ def retraction_prompt(
     depends on the player knowing about it -- which means writing the pair
     together or not at all.
     """
+    language_line = (
+        "" if language == "en" else f"\nWrite both messages in {LANGUAGE_NAMES[language]}.\n"
+    )
     user = f"""{station_brief(st)}
+{language_line}
 
 {'=' * 78}
 
@@ -601,4 +615,4 @@ Reply with JSON:
 `require` must name at least one door from the withdrawn obligation, in the
 opposite state. `retraction_style` is `explicit` when you name the door outright,
 `partial` when you keep part of the instruction and drop the rest."""
-    return SYSTEM, user
+    return system_prompt(language), user

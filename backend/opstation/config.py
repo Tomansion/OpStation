@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .paths import DIFFICULTY_FILE, VOICES_FILE
+from .paths import DIFFICULTY_FILE, voices_file
 
 ACTOR_TYPES: tuple[str, ...] = (
     "security",
@@ -90,6 +90,11 @@ class Voices:
     def voice_for(self, actor_type: str) -> str:
         return self.raw["assignment"][actor_type]["voice"]
 
+    def speaker_for(self, actor_type: str) -> int | None:
+        """The pinned speaker id inside a multi-speaker model, e.g. the French
+        `upmc` voice's `jessica`/`pierre` pair. None for a single-speaker model."""
+        return self.raw["assignment"][actor_type].get("speaker_id")
+
     def post_filter_for(self, actor_type: str) -> str | None:
         return self.raw["assignment"][actor_type].get("post_filter")
 
@@ -102,9 +107,9 @@ def difficulty(path: Path | None = None) -> Difficulty:
     return Difficulty(json.loads((path or DIFFICULTY_FILE).read_text(encoding="utf-8")))
 
 
-@lru_cache(maxsize=1)
-def voices(path: Path | None = None) -> Voices:
-    return Voices(json.loads((path or VOICES_FILE).read_text(encoding="utf-8")))
+@lru_cache(maxsize=None)
+def voices(language: str = "en", path: Path | None = None) -> Voices:
+    return Voices(json.loads((path or voices_file(language)).read_text(encoding="utf-8")))
 
 
 #: Phase boundaries as fractions of duration_seconds (spec 2.1).

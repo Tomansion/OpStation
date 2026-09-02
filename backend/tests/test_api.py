@@ -145,9 +145,13 @@ def test_admin_status_reports_the_bank(client):
     status = client.get("/api/admin/status").json()
     assert status["bank"]["total"] == 1
     assert status["station_version"]
-    assert set(status["voices"]) == {
-        "security", "construction", "cargo", "medical", "civilian", "system"
-    }
+    # One assignment per generation language (spec 11.2), each covering all
+    # six actor types.
+    assert set(status["voices"]) == {"en", "fr"}
+    for assignment in status["voices"].values():
+        assert set(assignment) == {
+            "security", "construction", "cargo", "medical", "civilian", "system"
+        }
 
 
 def _await(socket, predicate, limit=25):

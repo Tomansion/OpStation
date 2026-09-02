@@ -1,7 +1,7 @@
 # OpStation — Game Specification
 
-**Version:** 2.1 — 2026-09-02
-**Status:** design locked on the questions answered in `archive/spec.v1.md` review. v2.1 adds a second generation language (§11.2.1, §12, §13.7, §16) on top of the locked v2 design; nothing load-bearing from v2 was reopened to do it. Open questions are collected in [Open questions](#open-questions).
+**Version:** 2.0 — 2026-08-21
+**Status:** design locked on the questions answered in `archive/spec.v1.md` review. Open questions are collected in [Open questions](#open-questions).
 
 ---
 
@@ -689,7 +689,6 @@ data/scenarios/<scenario_id>/
   "generator": { "model": "...", "template_version": "3", "seed": 4711 },
   "station_version": "v1",
   "duration_seconds": 1620,
-  "language": "en",
 
   "actors": [
     {
@@ -697,8 +696,7 @@ data/scenarios/<scenario_id>/
       "type": "security",
       "name": "Officer Kade Ruiz",
       "portrait": "security.png",
-      "voice": "security",
-      "speaker": null
+      "voice": "security"
     }
   ],
 
@@ -798,35 +796,25 @@ Notes:
 - `at` is always **seconds from session start**, integer.
 - Every message with a `task_group_id` is the message that *creates or updates* that obligation.
 - A challenge carries **`depends_on`**: the message ids its correct answer rests on. Added during implementation, because two rules are otherwise unverifiable — V19 has to check that everything the answer depends on was delivered *before* the question, and V29 has to recognise a retraction whose teeth are a challenge rather than a later task. Without it both rules can only be guessed at.
-- `language` ∈ `en | fr` (§11.2.1), set once at generation and never changed. Absent on any scenario generated before this field existed, which defaults it to `en`.
-- `actor.speaker` is the pinned index into a multi-speaker voice model — null for every English voice and for most French ones, set only where a voice file holds more than one speaker (§11.2.1).
 
 ### 11.2 Actors
 
-Exactly **6 actor types**, fixed forever, each with one portrait and one pinned TTS voice per generation language. The English assignment lives in **[`config/voices.json`](config/voices.json)**; the French one in **[`config/voices.fr.json`](config/voices.fr.json)**; the reasoning for every pick, in either file, is recorded there rather than duplicated here.
+Exactly **6 actor types**, fixed forever, each with one portrait and one pinned TTS voice. The assignment lives in **[`config/voices.json`](config/voices.json)**, with the reasoning for every pick recorded there.
 
-| Type | English (Piper) | French (Piper) | Portrait | Role |
-|---|---|---|---|---|
-| `security` | `en_GB-northern_english_male-medium` | `fr_FR-tom-medium` | `assets/portraits/security.png` | Patrols, EVA, inspections, lockdowns |
-| `construction` | `en_US-joe-medium` | `fr_FR-upmc-medium` (`pierre`) | `assets/portraits/construction.png` | Extension work, exterior operations |
-| `cargo` | `en_US-kusal-medium` | `fr_FR-gilles-low` | `assets/portraits/cargo.png` | Transfers, storage, low-priority traffic |
-| `medical` | `en_GB-cori-high` | `fr_FR-siwis-medium` | `assets/portraits/medical.png` | Patient transport, quarantine |
-| `civilian` | `en_GB-alba-medium` | `fr_FR-upmc-medium` (`jessica`) | `assets/portraits/civilian.png` | Residents, researchers, routine requests |
-| `system` | `en_US-lessac-high` + `pa_intercom` | `fr_FR-mls_1840-low` + `pa_intercom` | `assets/portraits/system.png` | Automated alerts, alarms, failure notices |
+| Type | Piper voice | Portrait | Role |
+|---|---|---|---|
+| `security` | `en_GB-northern_english_male-medium` | `assets/portraits/security.png` | Patrols, EVA, inspections, lockdowns |
+| `construction` | `en_US-joe-medium` | `assets/portraits/construction.png` | Extension work, exterior operations |
+| `cargo` | `en_US-kusal-medium` | `assets/portraits/cargo.png` | Transfers, storage, low-priority traffic |
+| `medical` | `en_GB-cori-high` | `assets/portraits/medical.png` | Patient transport, quarantine |
+| `civilian` | `en_GB-alba-medium` | `assets/portraits/civilian.png` | Residents, researchers, routine requests |
+| `system` | `en_US-lessac-high` + `pa_intercom` | `assets/portraits/system.png` | Automated alerts, alarms, failure notices |
 
-The English six were chosen for **pairwise distinctness**, not for individual quality: three male, three female, across six accents (Northern English, American, Sri Lankan English, British RP, Scottish, American-neutral). The weakest pair is Medical against Civilian — both British female, separated by RP versus Scottish. Multi-speaker models (`libritts`, `arctic`, `vctk`) were rejected because speaker selection inside them is not stable enough to pin; the three `low`-quality models were rejected because radio messages carry no transcript, so intelligibility is not optional. The French set follows the same rule with one documented exception — see §11.2.1.
+The six were chosen for **pairwise distinctness**, not for individual quality: three male, three female, across six accents (Northern English, American, Sri Lankan English, British RP, Scottish, American-neutral). The weakest pair is Medical against Civilian — both British female, separated by RP versus Scottish. Multi-speaker models (`libritts`, `arctic`, `vctk`) were rejected because speaker selection inside them is not stable enough to pin; the three `low`-quality models were rejected because radio messages carry no transcript, so intelligibility is not optional.
 
-The `system` voice additionally runs through a **band-limiting intercom filter** at generation time (`highpass 400 Hz`, `lowpass 3400 Hz`, hard compression), in both languages. Without it the station's automated voice is simply a seventh person and provenance gets muddier; with it, "the station said it" is audibly different from "somebody said it".
+The `system` voice additionally runs through a **band-limiting intercom filter** at generation time (`highpass 400 Hz`, `lowpass 3400 Hz`, hard compression). Without it the station's automated voice is simply a seventh person and provenance gets muddier; with it, "the station said it" is audibly different from "somebody said it".
 
-**Changing a pinned voice after scenarios exist silently invalidates every provenance question in the bank.** Treat both `config/voices*.json` files as append-only.
-
-### 11.2.1 Why two languages, and why they never mix
-
-The plan said English only, deliberately: §13.7 explains why reading difficulty is a confound rather than a style question for this instrument, and treating non-native English as part of what is measured was a considered call, not an oversight. Adding French does not relax that call — it adds a second, equally strict arm alongside it. A scenario is generated wholly in one language, text and audio together, and that language is fixed for the scenario's entire life: nothing about play, mid-session, ever mixes English and French, and nothing about play lets a language be chosen after generation. What was reopened is narrower than it looks: not "should reading difficulty be measured", but "does that measurement have to be taken in English specifically, or does it hold in French too". Language is therefore a **generation-time parameter**, selected on the admin page alongside duration and thread count (§12.2), never a runtime toggle — consistent with §16's rule that the runtime never calls an LLM or a TTS engine, since a runtime language switch would mean regenerating on the fly.
-
-**The voice count does not divide evenly.** Piper's French catalogue does not clear the bar §11.2 set for English: excluding multi-speaker models with unstably-many anonymous speakers (the same reason `libritts`/`arctic`/`vctk` were rejected), only four single-identity French voices exist at medium quality or above — `siwis`, `tom`, and `upmc`'s two named speakers `jessica`/`pierre` — against six actor types, and no French `high`-quality model exists at all. Sharing a voice between two actor types was rejected outright: §11.4's "a voice is never shared" rule is what makes a provenance question answerable, and breaking it would weaken the mechanic itself, not just the audio. Building or vetting a second TTS engine for French alone was judged disproportionate for a first pass. What `config/voices.fr.json` does instead, spelled out in full in its own `quality_note`, is spend two `low`-quality models (`gilles`, `mls_1840`) on the two roles where the compromise costs least — Cargo, already the lowest-salience human actor by its own English rationale, and System, which is band-limited by the intercom filter regardless of source quality. This is a deliberate, flagged exception to the quality bar, not a quiet one, and it is the first thing to revisit if Piper ships more French voices.
-
-**The frontend chrome splits by audience, not by completeness.** Before a session exists, the home page carries its own English/French toggle: it decides which language's scenario bank is shown and which language its own instructions render in — a browsing choice, not a session one. Once **Start shift** creates a session, that choice is over: the game HUD, the message modal and the debrief all take their language from the chosen scenario's own `language` field, never from the toggle, so a running session cannot be switched. Both render from the same small string table (`frontend/lib/i18n.js`), because that text is instructional and comprehension-affecting in a way the admin console is not. The admin console stays English-only: it is an operator/researcher tool, not part of what a session measures, and doubling its size (467 lines, by far the largest page) for no participant-facing benefit was not worth it. One small, known gap from this split: the station canvas's native hover tooltip (`station/render.js`, shared with the dev preview and the printed handbook) still reports a door's state in English in both languages, since translating it would mean threading a language option through a renderer three other, non-participant contexts also depend on. Worth revisiting if it turns out to matter in practice; it does not currently, since the map is read by colour (§15), not by hovering.
+**Changing a pinned voice after scenarios exist silently invalidates every provenance question in the bank.** Treat `config/voices.json` as append-only.
 
 ### 11.3 Portraits
 
@@ -855,9 +843,9 @@ Scenarios are **generated offline into a bank** and played deterministically at 
 ### 12.1 Pipeline
 
 1. **Template selection** — a hand-authored JSON template fixes the structure: `duration_seconds`, phase boundaries, thread count and grades, how many tempting requests, how many superseding updates, dormancy requirements, challenge slots and kinds, volume targets.
-2. **LLM fill** — the LLM receives the station map, the actor roster, the task/`hold` semantics, the template, the timing rules, and the target language (§11.2.1, chosen alongside the template). It produces `scenario.json`: actor names, thread instantiations, message prose, timings, tasks, `fail_message` texts, challenges with distractors and explanations — all of it in that one language, never mixed.
-3. **Validation** — the validator (§13) runs, against the idiom list and thresholds for the scenario's own language (§13.7). On failure the report is fed back to the LLM for up to **5** repair attempts (`generator_repair_attempts`), each attempt receiving the full validator report so it can fix every rule at once. A scenario that still fails is stored as `invalid` and never offered for play.
-4. **TTS rendering** — every `radio` message and every `radio` challenge prompt is rendered to WAV in the sender's pinned voice for that language ([`config/voices.json`](config/voices.json) for English, [`config/voices.fr.json`](config/voices.fr.json) for French), written to `audio/`, and its real `audio_duration` written back into the JSON. `system` output passes through the `pa_intercom` filter before being written.
+2. **LLM fill** — the LLM receives the station map, the actor roster, the task/`hold` semantics, the template, and the timing rules. It produces `scenario.json`: actor names, thread instantiations, message prose, timings, tasks, `fail_message` texts, challenges with distractors and explanations.
+3. **Validation** — the validator (§13) runs. On failure the report is fed back to the LLM for up to **5** repair attempts (`generator_repair_attempts`), each attempt receiving the full validator report so it can fix every rule at once. A scenario that still fails is stored as `invalid` and never offered for play.
+4. **TTS rendering** — every `radio` message and every `radio` challenge prompt is rendered to WAV in the sender's pinned voice ([`config/voices.json`](config/voices.json)), written to `audio/`, and its real `audio_duration` written back into the JSON. `system` output passes through the `pa_intercom` filter before being written.
 
    **A pause of `tts_sentence_gap_seconds` (default 1 s) is inserted between sentences.** Piper yields one audio chunk per sentence, so the gap uses its own segmentation rather than a guess at where sentences end. This is not cosmetic. A radio message has no transcript and is heard exactly once, so two instructions running into each other are not merely harder to follow — they are unintelligible, and the pause is what lets a listener separate *"H5 stays closed"* from *"until I clear it"*. It also gives the important clause somewhere to land.
 
@@ -895,7 +883,7 @@ Three more things are structural for the same reason:
 
 ### 12.2 Generation is triggered manually
 
-A **Generate scenario** button on the admin page starts a generation job with a small form (duration, thread count, finale thread choice or "random", language, optional theme hint, optional seed). Progress is streamed. Nothing about generation happens during a play session.
+A **Generate scenario** button on the admin page starts a generation job with a small form (duration, thread count, finale thread choice or "random", optional theme hint, optional seed). Progress is streamed. Nothing about generation happens during a play session.
 
 ### 12.3 Requirements to state explicitly in the generation prompt
 
@@ -912,7 +900,7 @@ A **Generate scenario** button on the admin page starts a generation job with a 
 - Use **indirect obligations** (§6.8) for isolation instructions: name the place, not the doors, and set `derived_from`. Only the 17 targets listed in `station.json` may be named, never one of the four areas that cannot be sealed alone, and `require` must carry the cut only — never the volume's interior doors.
 - Every challenge needs a **pretext** (§8.4): a reason the asker needs the answer. Prefer an asker from a *different* thread than the one being asked about.
 - The station map is fixed; only rooms, corridors, hangars and door ids present in `station/station.json` may be named.
-- Exactly one language, chosen for the scenario at generation time — English or French (§11.2.1), never mixed. Everything player-facing follows it: prose, actor names, and the plain-language rules in §13.7.
+- English only.
 
 ---
 
@@ -984,15 +972,13 @@ Every scenario must pass all 38 rules before it can be played. The report is wri
 | V33 | The scenario's `station_version` matches `station.json`'s `version`. |
 | V34 | The scenario records the `config/difficulty.json` values it was validated against; the admin page flags a mismatch with the running config. |
 
-### 13.7 Plain language
+### 13.7 Plain English
 
 | # | Rule |
 |---|---|
-| V35 | **No idioms, no slang, no jokes, and no sentence long enough that holding it is the hard part.** Errors on a curated list of figures of speech and slang *in the scenario's own language*, and on any sentence over 30 words. Warns on spoken sentences over 20 words. |
+| V35 | **No idioms, no slang, no jokes, and no sentence long enough that holding it is the hard part.** Errors on a curated list of figures of speech and slang, and on any sentence over 30 words. Warns on spoken sentences over 20 words. |
 
-Most players will not be native speakers of the scenario's language, and a `radio` message is heard exactly once with no transcript and no replay. That makes reading difficulty a **confound, not a style preference**: a player who fails because they could not decode *"buy me some time"* (English) or *"il était moins une"* (French) in one hearing has been measured on their reading of the language, not on their memory — which is the one thing the instrument exists to measure.
-
-V35 checks against two curated lists, `IDIOMS_EN` and `IDIOMS_FR` (`backend/opstation/validator/rules.py`), selected by the scenario's `language` field. The French list is its own curation, not a translation of the English one — an idiom is idiomatic in one language and not the other, so translating the English list word-for-word would ban phrases nobody says while missing the ones a model actually reaches for in French. It also bans `"feu vert"`/`"feu rouge"` ("green light"/"red light") for a second, game-specific reason: those exact words are the literal, load-bearing colour of an open and a closed door (§15), so the figurative sense would collide with the mechanic rather than merely being hard to parse.
+Most players will not be native English speakers, and a `radio` message is heard exactly once with no transcript and no replay. That makes reading difficulty a **confound, not a style preference**: a player who fails because they could not decode *"buy me some time"* in one hearing has been measured on their English, not on their memory — which is the one thing the instrument exists to measure.
 
 ### 13.8 Player-facing integrity
 
@@ -1018,7 +1004,7 @@ Speech rendering serves the same goal from the other side (§12.1 step 4): a pau
 
 - **Backend:** Python 3.12 + FastAPI. WebSockets for the live session. Server-authoritative clock and game loop.
 - **LLM:** LiteLLM, provider-agnostic, generation-time only.
-- **TTS:** **Piper**, local and offline, generation-time only. Six pinned voice models per generation language, one per actor type — see [`config/voices.json`](config/voices.json) (English), [`config/voices.fr.json`](config/voices.fr.json) (French), and §11.2/§11.2.1. Rendered at generation time into the scenario folder, with the `system` voice passed through an intercom filter. Wrapped behind a small `TextToSpeech` interface so a cloud provider can be swapped in later without touching the pipeline.
+- **TTS:** **Piper**, local and offline, generation-time only. Six pinned voice models, one per actor type — see [`config/voices.json`](config/voices.json) and §11.2. Rendered at generation time into the scenario folder, with the `system` voice passed through an intercom filter. Wrapped behind a small `TextToSpeech` interface so a cloud provider can be swapped in later without touching the pipeline.
 - **Frontend:** plain ES modules, no framework and no build step. Station rendered on an HTML `<canvas>` with hit-testing for door clicks, by the same [`station/render.js`](station/render.js) the dev preview and the printed handbook use. **This is a deliberate change from the Angular plan** — see §14.7.
 - **Storage:** flat files, no database server.
 - **Packaging:** one Dockerfile plus a `docker-compose.yml`; README with local and Docker instructions.
@@ -1113,7 +1099,7 @@ One JSON per session, written atomically (temp file + rename). Persisted on ever
 |---|---|---|
 | GET | `/api/station` | The layout, served from the same `station.json` the backend loads |
 | GET | `/api/config` | The tunables the client's own behaviour depends on, plus the UI-supplied "I don't know" option |
-| GET | `/api/scenarios` | Bank listing: id, name, language, duration, thread count, validity, whether its audio exists |
+| GET | `/api/scenarios` | Bank listing: id, name, duration, thread count, validity, whether its audio exists |
 | GET | `/api/scenarios/{id}/audio/{file}` | A pre-rendered radio message |
 | POST | `/api/sessions` | `{participant_name, scenario_id}` → `{session_id}` |
 | GET | `/api/sessions/{id}` | State snapshot |
@@ -1214,7 +1200,7 @@ Recorded so they are not re-litigated:
 - Any transcript or fallback for radio messages — audio failure voids the session.
 - Surviving a backend restart mid-session.
 - Authentication.
-- Any language other than English or French (§11.2.1). Once a session has started, changing its language — the home page's language choice only selects which scenario to play (§11.2.1); the session itself is fixed to that scenario's language for its entire life.
+- Any language other than English.
 - Any LLM or TTS call at runtime.
 
 ---

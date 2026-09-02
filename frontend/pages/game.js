@@ -2,6 +2,7 @@
  * station clock and an elapsed timer. Nothing else. */
 
 import { api, connect, fmt } from '../lib/api.js';
+import { DOOR_STATE_WORDS, strings } from '../lib/i18n.js';
 import { closeModal, isOpen, showItem, shake } from '../lib/modal.js';
 import * as sfx from '../lib/sfx.js';
 import { mountStation, stationData } from '../lib/station.js';
@@ -15,11 +16,19 @@ export async function game(root, { navigate, params }) {
   try {
     snapshot = await api.session(sessionId);
   } catch (exc) {
+    // The scenario's language is not known yet at this point -- the session
+    // fetch that would tell us is what just failed -- so this one panel stays
+    // in English regardless of what the session would have been.
     root.innerHTML = `<div class="panel alert"><h2>Session unavailable</h2>
       <div class="body note">${exc.message}. Sessions do not survive a backend
       restart. <a href="/" data-nav>Back to the start</a></div></div>`;
     return;
   }
+
+  // Fixed for the session's whole lifetime (spec 16): a session is generated
+  // and played in one language, never switched mid-session.
+  const lang = snapshot.language || 'en';
+  const s = strings(lang);
 
   root.innerHTML = `
     <div class="cols">
@@ -29,16 +38,16 @@ export async function game(root, { navigate, params }) {
         </div></div>
       </div>
       <div class="col">
-        <button id="notify" data-notify disabled>NOTHING WAITING</button>
+        <button id="notify" data-notify disabled>${s.nothingWaiting}</button>
         <div class="readouts">
-          <div class="readout"><div class="k">PENALTIES</div><div class="v" data-penalties>0</div></div>
-          <div class="readout"><div class="k">ELAPSED</div><div class="v" data-elapsed>00:00</div></div>
-          <div class="readout"><div class="k">STATION TIME</div><div class="v" data-wall>--:--:--</div></div>
+          <div class="readout"><div class="k">${s.penalties}</div><div class="v" data-penalties>0</div></div>
+          <div class="readout"><div class="k">${s.elapsed}</div><div class="v" data-elapsed>00:00</div></div>
+          <div class="readout"><div class="k">${s.stationTime}</div><div class="v" data-wall>--:--:--</div></div>
         </div>
         <div class="panel" style="margin-top:12px">
-          <h2 data-phase>On shift</h2>
+          <h2 data-phase>${s.onShift}</h2>
           <div class="body note" data-hint>
-            Doors are yours. Messages arrive on the panel above.
+            ${s.onShiftHint}
           </div>
         </div>
       </div>
@@ -66,6 +75,7 @@ export async function game(root, { navigate, params }) {
   const ctx = {
     scenarioId: snapshot.scenario_id,
     dontKnow: config.dont_know,
+    lang,
     onAcknowledge: uid => socket.send({ type: 'acknowledge', uid }),
     onAnswer: (uid, option_id) => socket.send({ type: 'answer_challenge', uid, option_id }),
   };
@@ -76,7 +86,7 @@ export async function game(root, { navigate, params }) {
 
   const socket = connect(sessionId, payload => {
     if (payload.type === 'shake') { shake(); return; }
-    if (payload.type === 'confirmed') { showConfirmation(payload.text); return; }
+    if (payload.type === 'confirmed') { showConfirmation(payload.text, lang); return; }
     if (payload.type === 'opened' || payload.type === 'answered') return; // state follows
     if (payload.type === 'error') {
       el.hint.textContent = payload.message;
@@ -112,9 +122,9 @@ export async function game(root, { navigate, params }) {
     el.notify.disabled = waiting === 0;
     el.notify.className = waiting ? 'waiting' : '';
     el.notify.innerHTML = waiting
-      ? `OPEN NOTIFICATION${config.show_pending_count && waiting > 1
-          ? `<span class="count">${waiting} WAITING</span>` : ''}`
-      : 'NOTHING WAITING';
+      ? `${s.openNotification}${config.show_pending_count && waiting > 1
+          ? `<span class="count">${s.waitingCount(waiting)}</span>` : ''}`
+      : s.nothingWaiting;
 
     // The modal follows the server's view of the front of the queue, so a
     // refresh or a reconnect puts the player back where they were.
@@ -130,9 +140,8 @@ export async function game(root, { navigate, params }) {
     }
 
     if (state.phase === 'debrief') {
-      el.phase.textContent = 'Debrief — untimed';
-      el.hint.textContent = 'The shift is over. Nothing can fail now. '
-        + 'Answer the last questions from memory.';
+      el.phase.textContent = s.debrief;
+      el.hint.textContent = s.debriefHint;
     } else if (state.phase === 'complete') {
       socket.close();
       navigate(`/summary/${sessionId}`);
@@ -156,10 +165,17 @@ export async function game(root, { navigate, params }) {
 /* A quiet, non-blocking confirmation for an instruction the player already
  * carried out right away -- unlike everything else in the queue, this does
  * not need acknowledging and does not compete with real traffic. */
-function showConfirmation(text) {
+function showConfirmation(text, lang) {
+  const s = strings(lang);
+  const words = DOOR_STATE_WORDS[lang] || DOOR_STATE_WORDS.en;
+  // `text` is built server-side as "D7 open, H5 closed" -- protocol words
+  // (spec 11.1's DoorState), not scenario prose, so they are translated here
+  // rather than at the source.
+  const localised = lang === 'en' ? text
+    : text.replace(/\bopen\b/g, words.open).replace(/\bclosed\b/g, words.closed);
   const el = document.createElement('div');
   el.className = 'toast';
-  el.textContent = `CONFIRMED — ${text}`;
+  el.textContent = s.confirmed(localised);
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => {

@@ -32,6 +32,11 @@ export async function admin(root, { navigate }) {
             <option value="reactor_emergency">reactor emergency</option>
             <option value="station_contamination">station-wide contamination</option>
           </select>
+          <label for="lang">Language</label>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="fr">French</option>
+          </select>
           <label for="thm">Theme hint (optional)</label>
           <input id="thm" placeholder="e.g. a supply ship is overdue">
           <label><input type="checkbox" id="aud" checked style="width:auto"> render audio</label>
@@ -50,10 +55,14 @@ export async function admin(root, { navigate }) {
                  <td>${s.penalties}</td></tr>`).join('')}</table>`
             : '<div class="note">No live sessions.</div>'}
         </div></div>
-        <div class="panel"><h2>Voices</h2><div class="body"><table>
-          ${Object.entries(status.voices).map(([type, v]) => `<tr>
-            <td>${type}</td><td>${v.voice}${v.post_filter ? ` + ${v.post_filter}` : ''}</td>
-          </tr>`).join('')}</table></div></div>
+        <div class="panel"><h2>Voices</h2><div class="body">
+          ${Object.entries(status.voices).map(([lang, assignment]) => `
+            <div class="note" style="margin-top:${lang === 'en' ? '0' : '8px'}">${lang.toUpperCase()}</div>
+            <table>${Object.entries(assignment).map(([type, v]) => `<tr>
+              <td>${type}</td>
+              <td>${v.voice}${v.speaker_id != null ? ` #${v.speaker_id}` : ''}${v.post_filter ? ` + ${v.post_filter}` : ''}</td>
+            </tr>`).join('')}</table>`).join('')}
+        </div></div>
       </div>
     </div>`;
 
@@ -67,6 +76,7 @@ export async function admin(root, { navigate }) {
       duration_seconds: Number(root.querySelector('#dur').value) * 60,
       threads: Number(root.querySelector('#thr').value),
       finale: root.querySelector('#fin').value,
+      language: root.querySelector('#lang').value,
       theme: root.querySelector('#thm').value,
       render_audio: root.querySelector('#aud').checked,
     });
@@ -87,11 +97,12 @@ export async function admin(root, { navigate }) {
 function bankTable(scenarios) {
   if (!scenarios.length) return '<div class="note">The bank is empty.</div>';
   return `<table>
-    <tr><th>Scenario</th><th>Name</th><th>Min</th><th>Msg</th><th>Thr</th>
+    <tr><th>Scenario</th><th>Name</th><th>Lang</th><th>Min</th><th>Msg</th><th>Thr</th>
         <th>Audio</th><th>Verdict</th></tr>
     ${scenarios.map(s => `<tr>
       <td><a href="/admin/scenarios/${s.scenario_id}" data-nav>${s.scenario_id}</a></td>
       <td>${esc(s.name)}</td>
+      <td>${(s.language || 'en').toUpperCase()}</td>
       <td>${Math.round(s.duration_seconds / 60)}</td>
       <td>${s.messages}</td><td>${s.threads}</td>
       <td>${s.radio_messages === 0 ? '—'

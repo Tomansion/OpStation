@@ -28,6 +28,9 @@ class Actor(Base):
     name: str
     portrait: str
     voice: str
+    #: Pinned index into a multi-speaker voice model (e.g. French `upmc`'s
+    #: jessica/pierre pair). None for a single-speaker model.
+    speaker: int | None = None
 
 
 class Thread(Base):
@@ -136,6 +139,10 @@ class Scenario(Base):
     name: str
     duration_seconds: int
     station_version: str
+    #: Generation-time only (spec 16): a scenario is written entirely in one
+    #: language, text and audio alike, never mixed. Absent on scenarios
+    #: generated before this field existed, which are all English.
+    language: Literal["en", "fr"] = "en"
     actors: list[Actor]
     threads: list[Thread]
     task_groups: list[TaskGroup]

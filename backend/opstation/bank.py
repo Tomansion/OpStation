@@ -20,6 +20,7 @@ from .station import station as load_station
 class BankEntry:
     scenario_id: str
     name: str
+    language: str
     duration_seconds: int
     threads: int
     messages: int
@@ -59,7 +60,8 @@ def entry_for(directory: Path) -> BankEntry | None:
         scenario = Scenario.load(path)
     except Exception:  # noqa: BLE001 - a broken file is listed as invalid, not fatal
         return BankEntry(
-            scenario_id=directory.name, name="(unreadable)", duration_seconds=0, threads=0,
+            scenario_id=directory.name, name="(unreadable)", language="en",
+            duration_seconds=0, threads=0,
             messages=0, valid=False, station_version="", generated_at="", has_audio=False,
             radio_messages=0, tunables_match=False, failed_rules=["unreadable"],
         )
@@ -71,6 +73,7 @@ def entry_for(directory: Path) -> BankEntry | None:
     return BankEntry(
         scenario_id=scenario.scenario_id,
         name=scenario.name,
+        language=scenario.language,
         duration_seconds=scenario.duration_seconds,
         threads=sum(1 for t in scenario.threads if t.grade in ("ordinary", "finale")),
         messages=len(scenario.messages),

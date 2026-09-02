@@ -146,6 +146,7 @@ def _snapshot(session) -> dict:
         "participant_name": session.participant_name,
         "scenario_id": session.scenario.scenario_id,
         "scenario_name": session.scenario.name,
+        "language": session.scenario.language,
         **session.engine.public_state(),
     }
 
@@ -233,6 +234,7 @@ async def session_summary(session_id: str) -> dict:
         "session_id": session_id,
         "participant_name": detail["participant_name"],
         "scenario_name": detail["scenario_name"],
+        "language": scenario.language,
         "penalties": detail["penalties"],
         "elapsed": detail["elapsed"],
         "duration_seconds": detail["duration_seconds"],
@@ -314,7 +316,7 @@ def admin_status() -> dict:
         "station_version": load_station().version,
         "difficulty": diff.raw,
         "tunables_fingerprint": diff.validator_fingerprint(),
-        "voices": voices().raw["assignment"],
+        "voices": {lang: voices(lang).raw["assignment"] for lang in ("en", "fr")},
         "bank": {
             "total": len(entries),
             "playable": sum(1 for e in entries if e.playable),
@@ -412,6 +414,7 @@ async def admin_generate(payload: dict) -> dict:
                 theme=payload.get("theme") or None,
                 threads=int(payload.get("threads", 5)),
                 seed=payload.get("seed"),
+                language=payload.get("language") or "en",
             )
             directory = publish(result)
             if result.ok and payload.get("render_audio", True):

@@ -20,8 +20,10 @@ Generating a scenario needs an LLM key in a gitignored `.env` beside this file:
 
 ```sh
 echo 'MISTRAL_API_KEY=...' > .env
-make voices                              # download the six pinned Piper voices (~500 MB, once)
-make generate ARGS="--finale invasion"   # writes into data/scenarios/
+make voices                                             # download the pinned Piper voices for
+                                                          # both generation languages (~500 MB, once)
+make generate ARGS="--finale invasion"                  # writes into data/scenarios/, English
+make generate ARGS="--language fr --finale invasion"    # same, in French
 ```
 
 Or in Docker:
@@ -39,7 +41,8 @@ docker compose up app   # play on http://localhost:3000, generate from /admin
 | **[`frontend/`](frontend/)**                           | Four pages of plain ES modules. No build step.                                                 |
 | **[`station/`](station/)**                             | The layout: authoritative JSON, canvas renderer, browsable preview, printable sector handbook. |
 | **[`config/difficulty.json`](config/difficulty.json)** | Every value that shapes difficulty, in one place.                                              |
-| **[`config/voices.json`](config/voices.json)**         | The pinned Piper voice per actor type. Append-only.                                            |
+| **[`config/voices.json`](config/voices.json)**         | The pinned Piper voice per actor type, English. Append-only.                                   |
+| **[`config/voices.fr.json`](config/voices.fr.json)**    | The same, French. Append-only.                                                                 |
 | **[`archive/`](archive/)**                             | Superseded drafts and the review rounds that produced the current spec.                        |
 
 ```

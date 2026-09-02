@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
 DIFFICULTY_FILE = CONFIG_DIR / "difficulty.json"
 VOICES_FILE = CONFIG_DIR / "voices.json"
+#: One voice file per generation language (spec 11.2). English stays at the
+#: original `voices.json` path so the existing bank never has to move.
+VOICES_FILES = {"en": VOICES_FILE, "fr": CONFIG_DIR / "voices.fr.json"}
 
 STATION_DIR = ROOT / "station"
 STATION_FILE = STATION_DIR / "station.json"
@@ -39,6 +42,10 @@ def use_data_dir(path: Path) -> None:
     SCENARIO_INDEX = SCENARIOS_DIR / "index.json"
     SESSIONS_DIR = DATA_DIR / "sessions"
     SESSION_INDEX = SESSIONS_DIR / "index.json"
+
+
+def voices_file(language: str = "en") -> Path:
+    return VOICES_FILES.get(language, VOICES_FILE)
 
 
 def scenario_dir(scenario_id: str) -> Path:

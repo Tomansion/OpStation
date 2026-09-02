@@ -1,6 +1,7 @@
 # The OpStation image. Serves the game and, via the admin panel, generates
 # new scenarios too -- both run in this same process, so the image carries
-# the LLM client, Piper, ffmpeg and the six pinned voice models.
+# the LLM client, Piper, ffmpeg and every pinned voice model (one set per
+# generation language, config/voices*.json).
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -21,8 +22,9 @@ COPY station/ station/
 COPY config/ config/
 COPY assets/ assets/
 
-# Voice models are large and pinned by config/voices.json. Downloaded at build
-# time so a generation run never depends on the network for audio.
+# Voice models are large and pinned by config/voices*.json, one file per
+# generation language. Downloaded at build time so a generation run never
+# depends on the network for audio.
 RUN python assets/download_voices.py
 
 # The bank and session records are mounted, not baked in.

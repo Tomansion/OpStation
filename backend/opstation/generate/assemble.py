@@ -89,9 +89,10 @@ def assemble(
     model: str = "",
     seed: int | None = None,
     attempts: int = 0,
+    language: str = "en",
 ) -> tuple[Scenario, Schedule]:
     diff = difficulty or load_difficulty()
-    voice_map = voices or load_voices()
+    voice_map = voices or load_voices(language)
 
     _ensure_end_of_shift_seal(plan, station)
     schedule = Scheduler(plan, diff, station).run()
@@ -205,6 +206,7 @@ def assemble(
         name=plan.name,
         duration_seconds=plan.duration_seconds,
         station_version=station.version,
+        language=language,
         generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         generator=GeneratorInfo(model=model, template_version="1", seed=seed, attempts=attempts),
         difficulty_fingerprint=diff.validator_fingerprint(),
@@ -241,6 +243,7 @@ def _actors(plan: Plan, voices: Voices) -> list[Actor]:
             name=plan.actor_names.get(t) or t.title(),
             portrait=f"{t}.png",
             voice=voices.voice_for(t),
+            speaker=voices.speaker_for(t),
         )
         for t in ACTOR_TYPES
     ]

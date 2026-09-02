@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Download the six pinned Piper voice models into assets/voices/.
+"""Download the pinned Piper voice models into assets/voices/.
 
-The voices are pinned in config/voices.json and that file is append-only: a
+The voices are pinned in config/voices*.json -- one file per generation
+language (spec 11.2, 14.1.1) -- and every one of those files is append-only: a
 voice is the only cue that tells one actor from another, so swapping one
 silently invalidates every provenance question in the bank.
 
@@ -40,19 +41,29 @@ def fetch(url: str, dest: Path) -> None:
 
 
 def main() -> int:
-    voices = json.loads((ROOT / "config" / "voices.json").read_text())["assignment"]
     OUT.mkdir(parents=True, exist_ok=True)
-    for actor_type, spec in voices.items():
-        voice = spec["voice"]
-        print(f"{actor_type}: {voice}")
-        base = url_for(voice)
-        try:
-            fetch(f"{base}.onnx", OUT / f"{voice}.onnx")
-            fetch(f"{base}.onnx.json", OUT / f"{voice}.onnx.json")
-        except Exception as exc:  # noqa: BLE001
-            print(f"  FAILED: {exc}", file=sys.stderr)
-            return 1
-    print(f"\n{len(voices)} voices in {OUT}")
+    seen: set[str] = set()
+    for config_path in sorted((ROOT / "config").glob("voices*.json")):
+        assignment = json.loads(config_path.read_text())["assignment"]
+        print(f"{config_path.name}:")
+        for actor_type, spec in assignment.items():
+            voice = spec["voice"]
+            # upmc-medium is pinned twice (spec 11.2 French: jessica and
+            # pierre are two speaker ids inside one model file), so fetch it
+            # once regardless of how many actor types point at it.
+            if voice in seen:
+                print(f"  {actor_type}: {voice} (already queued)")
+                continue
+            seen.add(voice)
+            print(f"  {actor_type}: {voice}")
+            base = url_for(voice)
+            try:
+                fetch(f"{base}.onnx", OUT / f"{voice}.onnx")
+                fetch(f"{base}.onnx.json", OUT / f"{voice}.onnx.json")
+            except Exception as exc:  # noqa: BLE001
+                print(f"  FAILED: {exc}", file=sys.stderr)
+                return 1
+    print(f"\n{len(seen)} voice model(s) in {OUT}")
     return 0
 
 

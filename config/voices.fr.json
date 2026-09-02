@@ -1,0 +1,60 @@
+{
+  "_comment": "Pinned Piper voice per actor type, French arm (spec 11.2, 14.1.1). Same append-only rule as voices.json: NEVER change one of these after French scenarios exist -- a voice is the only cue distinguishing one actor from another, so swapping one silently invalidates every provenance question in the bank. Adding a voice requires regenerating the French bank.",
+
+  "engine": "piper",
+  "voices_index": "https://huggingface.co/rhasspy/piper-voices",
+  "pinned_at": "2026-09-02",
+
+  "quality_note": "Piper's French catalogue does not clear the bar voices.json set for English: only 4 single-identity voices exist at medium quality or above (siwis, tom, and upmc's two named speakers), against 6 actor types, and no 'high' French model exists at all. Rather than share a voice between two actor types -- which would break the 'a voice is never shared' rule in spec 11.4 and make provenance questions unanswerable -- this file spends two 'low' quality models (gilles, mls_1840) to reach six, placed on the two roles where the compromise costs the least: cargo (low-priority traffic, per its own English rationale) and system (already run through the pa_intercom filter, which band-limits and compresses hard enough that a stronger source model would not survive it intact anyway). Revisit this file, not the rule, when Piper ships more French voices.",
+
+  "assignment": {
+    "security": {
+      "voice": "fr_FR-tom-medium",
+      "why": "Male, medium quality, single speaker. Security speaks in every phase and during the finale, so -- as in the English set -- it gets a clean, unshared voice rather than one of the two quality compromises."
+    },
+    "construction": {
+      "voice": "fr_FR-upmc-medium",
+      "speaker_id": 1,
+      "why": "Pierre, the male half of the two-speaker `upmc` model, medium quality. A named, fixed speaker id inside a 2-speaker corpus is not the 'unstable to pin' problem the English set rejected `libritts`/`arctic`/`vctk` for -- that objection was about selecting one voice out of 18-904 anonymous ones. Two named speakers pin exactly like two separate single-speaker models."
+    },
+    "cargo": {
+      "voice": "fr_FR-gilles-low",
+      "why": "Male, low quality -- the first of the two quality compromises (see quality_note). Spent here because English's own cargo entry calls it the 'third male voice... low-priority traffic': the least salient human role is where weaker audio costs the least."
+    },
+    "medical": {
+      "voice": "fr_FR-siwis-medium",
+      "why": "Female, medium quality, single speaker, from the well-established SIWIS corpus. The best available female voice, on the role English also gave its best voice to ('calm and precise, which suits Medical')."
+    },
+    "civilian": {
+      "voice": "fr_FR-upmc-medium",
+      "speaker_id": 0,
+      "why": "Jessica, the female half of the `upmc` pair, medium quality. Distinct model and corpus from siwis, which is what keeps it apart from Medical -- the same 'separate the two female British voices by accent' logic the English set used for Civilian, applied here as a separate recording rather than a separate accent."
+    },
+    "system": {
+      "voice": "fr_FR-mls_1840-low",
+      "why": "The second quality compromise (see quality_note), and deliberately the one spent here rather than on a human actor: the `pa_intercom` filter below band-limits and hard-compresses every system line regardless of source quality, so this is the one role where a low-quality model and a medium-quality one would end up sounding closer together than anywhere else in the set. Speaker 1840 of the MLS French corpus is anonymised in its own metadata -- gender unconfirmed, and irrelevant here the way it is not for a human actor, since the filter is what tells the player 'this is the station, not a person', not the voice underneath it.",
+      "post_filter": "pa_intercom"
+    }
+  },
+
+  "post_filters": {
+    "pa_intercom": {
+      "purpose": "Same filter and same purpose as the English set: make automated station announcements instantly recognisable as machine-spoken, so a provenance question never mistakes the station for a seventh person.",
+      "ffmpeg": "-af \"highpass=f=400,lowpass=f=3400,acompressor=threshold=-18dB:ratio=6,volume=1.6\"",
+      "note": "Band-limits to telephone/intercom range and compresses hard. Applied at generation time only; the runtime plays the rendered file as-is."
+    }
+  },
+
+  "distinctness_matrix": {
+    "_comment": "The weakest pair is what determines whether provenance is answerable. Reviewed pairwise at pinning time, same as voices.json.",
+    "sexes": "3 male (security, construction, cargo), 2 female (medical, civilian), 1 unconfirmed (system, moot behind the intercom filter)",
+    "models": "tom, upmc/pierre, gilles (male); siwis, upmc/jessica (female); mls_1840 (system)",
+    "weakest_pair": "construction (upmc/pierre) vs civilian (upmc/jessica) -- same underlying corpus, separated only by the model's own two trained speakers rather than by a different dataset the way every English pair is. The next weakest is cargo (gilles-low) against the medium-quality voices generally: audibly lower fidelity, which is the cost quality_note describes rather than a distinctness problem.",
+    "system_separation": "system is additionally separated from all five human voices by the pa_intercom filter, exactly as in the English set"
+  },
+
+  "rejected": {
+    "fr_FR-mls-medium": "125-speaker multi-speaker model with anonymous numeric ids; speaker selection inside it is not stable enough to pin -- the same reasoning that rejected en_US-libritts-high, en_US-arctic-medium and en_GB-vctk-medium",
+    "fr_FR-siwis-low": "superseded by fr_FR-siwis-medium, same speaker at higher quality"
+  }
+}

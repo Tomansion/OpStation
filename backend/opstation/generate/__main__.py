@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--finale", default=None,
                     help="invasion | hull_breach | reactor_emergency | station_contamination")
     ap.add_argument("--theme", default=None)
+    ap.add_argument("--language", default="en", choices=["en", "fr"])
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--model", default=None)
     ap.add_argument("--no-audio", action="store_true", help="skip the TTS pass")
@@ -37,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     result = generator.generate(
         duration=args.duration, finale=args.finale, theme=args.theme,
         threads=args.threads, seed=args.seed, everyday=args.everyday,
-        temptations=args.temptations,
+        temptations=args.temptations, language=args.language,
     )
     print()
     print(f"scenario   {result.scenario.scenario_id}  {result.scenario.name!r}")
