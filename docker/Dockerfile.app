@@ -23,5 +23,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c \
   "import urllib.request;urllib.request.urlopen('http://127.0.0.1:3000/healthz')"
 
-CMD ["python", "-m", "uvicorn", "--app-dir", "backend", "opstation.app:app", \
+CMD ["python", "-m", "uvicorn", "--app-dir", "backend", "websrv:app", \
      "--host", "0.0.0.0", "--port", "3000"]
