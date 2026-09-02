@@ -123,7 +123,7 @@ class Generator:
             "plan",
             "catalogue/phase: "
             + ", ".join(
-                f"{t.key}={t.get('catalogue_key')}@phase{t.get('opens_in_phase', '?')}"
+                f"{t.get('key', '?')}={t.get('catalogue_key')}@phase{t.get('opens_in_phase', '?')}"
                 for t in incidents
             ),
         )
