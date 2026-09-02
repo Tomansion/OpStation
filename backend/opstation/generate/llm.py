@@ -65,7 +65,7 @@ class LLM:
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    temperature=self.temperature if temperature is None else temperature,
+                    # temperature=self.temperature if temperature is None else temperature,
                     response_format={"type": "json_object"},
                     timeout=self.timeout,
                     num_retries=0,
